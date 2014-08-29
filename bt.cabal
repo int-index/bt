@@ -11,7 +11,7 @@ executable bt
                        Render
                        Parser
   build-depends:       base >=4.7 && <4.8,
-                       lens >=4.1 && <4.2,
+                       lens >=4.3 && <4.4,
                        mtl >=2.2 && <2.3,
                        containers >=0.5 && <0.6,
                        haskeline >=0.7 && <0.8

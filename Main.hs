@@ -4,32 +4,35 @@ module Main where
 import System.Console.Haskeline hiding (complete)
 import qualified Data.Map as M
 import Control.Applicative hiding (Const)
+import Control.Monad.State.Strict
+import Data.Bool
 
 import Expression
 import Parser (parse)
 import Render ()
 
 main :: IO ()
-main = runInputT settings (hello >> loop talk bye M.empty) where
+main = runInputT settings (evalStateT (hello >> loop talk bye) M.empty) where
     settings = Settings noCompletion Nothing True
 
-data Step a
-    = End
-    | Keep
-    | Update a
+loop :: Monad m => m Bool -> m a -> m a
+loop step end = go
+    where go = step >>= bool end go
 
-loop :: Monad m => (a -> m (Step a)) -> m b -> a -> m b
-loop step end = next where
-    next state = step state >>= \case
-        End  -> end
-        Keep -> next state
-        Update state' -> next state'
+type M a = StateT Definitions (InputT IO) a
 
-hello :: InputT IO ()
-hello = outputStrLn "The Bool Tool"
+withInputLine :: String -> (String -> M Bool) -> M Bool
+withInputLine s a = lift (getInputLine s) >>= maybe (return False) a
 
-bye :: InputT IO ()
-bye = outputStrLn "Bye!"
+outputLine :: String -> M ()
+outputLine s = lift (outputStrLn s)
+
+simply :: Monad m => m a -> m Bool
+simply a = a >> return True
+
+hello    = outputLine "The Bool Tool"
+bye      = outputLine "Bye!"
+notfound = outputLine "Not found"
 
 type Definitions = M.Map String Function
 
@@ -47,40 +50,24 @@ data Command
     | CleanCommand
     | PredefCommand
 
-talk :: Definitions -> InputT IO (Step Definitions)
-talk defs = getInputLine ">> " >>= \case
-    Nothing -> return End
-    Just commandString -> case parseCommand commandString of
-        Nothing -> do
-            outputStrLn "Couldn't parse the command..."
-            return Keep
+
+talk :: M Bool
+talk = withInputLine ">> " $ \commandString -> do
+    case parseCommand commandString of
+        Nothing -> simply $ outputLine "Couldn't parse the command..."
         Just command -> case command of
-            QuitCommand -> return End
-            PassCommand -> return Keep
-            HelpCommand -> do
-                outputStrLn helpMessage
-                return Keep
-            DefineCommand   name -> handleDefine   name defs
-            UndefineCommand name -> handleUndefine name defs
-            ShowCommand form name -> do
-                handleShow form name defs
-                return Keep
-            CompareCommand name1 name2 -> do
-                handleCompare name1 name2 defs
-                return Keep
-            ClassCommand name -> do
-                handleClass name defs
-                return Keep
-            CompleteCommand names -> do
-                handleComplete names defs
-                return Keep
-            ListCommand -> do
-                handleList defs
-                return Keep
-            CleanCommand -> do
-                return (Update $ M.empty)
-            PredefCommand -> do
-                return (Update $ M.union predef defs)
+            QuitCommand -> return False
+            PassCommand -> return True
+            HelpCommand -> simply $ outputLine helpMessage
+            DefineCommand    name -> handleDefine    name
+            UndefineCommand  name -> simply $ handleUndefine  name
+            ShowCommand form name -> simply $ handleShow form name
+            CompareCommand name1 name2 -> simply $ handleCompare name1 name2
+            ClassCommand name -> simply $ handleClass name
+            CompleteCommand names -> simply $ handleComplete names
+            ListCommand   -> simply $ gets (unlines . M.keys) >>= outputLine
+            CleanCommand  -> simply $ put M.empty
+            PredefCommand -> simply $ modify (M.union predef)
 
 predef :: Definitions
 predef = M.fromList
@@ -137,54 +124,33 @@ helpMessage = unlines
     , "predef            -- define standard functions"
     ]
 
-handleDefine :: String -> Definitions -> InputT IO (Step Definitions)
-handleDefine name defs = getInputLine (name ++ " = ") >>= \case
-    Nothing -> return End
-    Just s -> case parse s of
-        Nothing -> do
-            outputStrLn "Couldn't parse the expression..."
-            return Keep
-        Just fun -> do
-            outputStrLn "Done!"
-            return (Update $ M.insert name fun defs)
+handleDefine :: String -> M Bool
+handleDefine name = withInputLine (name ++ " = ") $ \s ->
+    simply $ case parse s of
+        Nothing  -> outputLine "Couldn't parse the expression..."
+        Just fun -> do modify $ M.insert name fun
+                       outputLine "Done!"
 
-handleUndefine :: String -> Definitions -> InputT IO (Step Definitions)
-handleUndefine name defs
-    | M.member name defs = do
-        outputStrLn "Done!"
-        return (Update $ M.delete name defs)
-    | otherwise = do
-        notfound
-        return Keep
+handleUndefine :: String -> M ()
+handleUndefine name = gets (M.member name) >>= bool notfound action
+    where action = do modify $ M.delete name
+                      outputLine "Done!"
 
-handleList :: Definitions -> InputT IO ()
-handleList defs = outputStrLn $ unlines (M.keys defs)
+handleShow :: (Function -> Function) -> String -> M ()
+handleShow form name = gets (M.lookup name) >>=
+    maybe notfound (outputLine . show . form)
 
-handleShow :: (Function -> Function) -> String -> Definitions -> InputT IO ()
-handleShow form name defs = case M.lookup name defs of
-    Just fun -> outputStrLn (show $ form fun)
-    Nothing  -> notfound
+handleCompare :: String -> String -> M ()
+handleCompare name1 name2
+    | name1 == name2 = outputLine "You're kidding, right?"
+    | otherwise = get >>= \defs ->
+        let eq = (==) <$> M.lookup name1 defs <*> M.lookup name2 defs
+        in maybe notfound (outputLine . bool "Different" "Equal") eq
 
-handleCompare :: String -> String -> Definitions -> InputT IO ()
-handleCompare name1 name2 defs
-    | name1 == name2 = outputStrLn "You're kidding, right?"
-    | otherwise = case (,) <$> M.lookup name1 defs <*> M.lookup name2 defs of
-        Just (fun1, fun2) -> if fun1 == fun2
-            then outputStrLn "Equal"
-            else outputStrLn "Different"
-        Nothing -> notfound
+handleClass :: String -> M ()
+handleClass name = gets (M.lookup name) >>=
+    maybe notfound (outputLine . unwords . map show . postClasses)
 
-handleClass :: String -> Definitions -> InputT IO ()
-handleClass name defs = case M.lookup name defs of
-    Just fun -> outputStrLn $ unwords $ map show (postClasses fun)
-    Nothing  -> notfound
-
-handleComplete :: [String] -> Definitions -> InputT IO ()
-handleComplete names defs = case mapM (flip M.lookup defs) names of
-    Just funs -> if complete funs
-        then outputStrLn "Complete"
-        else outputStrLn "Incomplete"
-    Nothing -> notfound
-
-notfound :: InputT IO ()
-notfound = outputStrLn "Not found"
+handleComplete :: [String] -> M ()
+handleComplete names = gets (forM names . flip M.lookup) >>=
+    maybe notfound (outputLine . bool "Incomplete" "Complete" . complete)
