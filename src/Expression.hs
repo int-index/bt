@@ -21,16 +21,18 @@ data Expression where
     Nor  :: Expression -> Expression -> Expression
     Ent  :: Expression -> Expression -> Expression
     Equ  :: Expression -> Expression -> Expression
+    Call :: String -> [Expression] -> Expression
 
 data Function where
     Function :: [String] -> Expression -> Function
     Table :: [Bool] -> Function
 
-instance Eq Function where
-    (==) = (==) `on` tableOf
+funeq :: Definitions -> Function -> Function -> Bool
+funeq defs = (==) `on` (tableOf defs)
 
 type Definitions = M.Map String Function
 
+predef :: Definitions
 predef = M.fromList
     [ ("1"   , Table [True ])
     , ("0"   , Table [False])
@@ -45,8 +47,8 @@ predef = M.fromList
     , ("equ" , Table [True , False, False, True ])
     ]
 
-eval :: Function -> [Bool] -> Bool
-eval (Function params e) args = value e where
+eval :: Definitions -> Function -> [Bool] -> Bool
+eval defs (Function params e) args = value e where
     value :: Expression -> Bool
     value (Const a) = a
     value (Access name)
@@ -60,7 +62,10 @@ eval (Function params e) args = value e where
     value (Nor  x y) = not $ value x || value y
     value (Ent  x y) = not (value x) || value y
     value (Equ  x y) = value x == value y
-eval (Table t) args = maybe (error "eval: Bad table") id $ t ^? ix (indexOf args)
+    value (Call name xs) = case M.lookup name defs of
+        Nothing  -> error $ "eval: Bad call " ++ name
+        Just fun -> eval defs fun (map value xs)
+eval _ (Table t) args = maybe (error "eval: Bad table") id $ t ^? ix (indexOf args)
     where indexOf = sum . zipWith (*) (powersOf 2) . reverse . map (bool 0 1)
           powersOf n = iterate (*n) 1
 
@@ -81,12 +86,13 @@ names' (Nand x y) = names' x ++ names' y
 names' (Nor  x y) = names' x ++ names' y
 names' (Ent  x y) = names' x ++ names' y
 names' (Equ  x y) = names' x ++ names' y
+names' (Call _ xs) = concatMap names' xs
 
-tablify :: Function -> Function
-tablify fun = Table (tableOf fun)
+tablify :: Definitions -> Function -> Function
+tablify defs fun = Table (tableOf defs fun)
 
-tableOf :: Function -> [Bool]
-tableOf fun = map (eval fun) (argsOf fun)
+tableOf :: Definitions -> Function -> [Bool]
+tableOf defs fun = map (eval defs fun) (argsOf fun)
 
 nameStream :: [String]
 nameStream = [1..] >>= flip replicateM alphabet
@@ -100,10 +106,10 @@ listAnd xs = foldl1 And xs
 
 data Form = Conjunctive | Disjunctive
 
-nf :: Form -> Function -> Function
-nf form fun = Function params (cat expr) where
+nf :: Form -> Definitions -> Function -> Function
+nf form defs fun = Function params (cat expr) where
     params = paramsOf fun
-    expr = map term $ filter (not1 . eval fun) (argsOf fun)
+    expr = map term $ filter (not1 . eval defs fun) (argsOf fun)
     term = zipWith prim (map Access params)
     prim p = bool p (Not p) . not2
     cat = concat1 . map concat2
@@ -114,13 +120,13 @@ nf form fun = Function params (cat expr) where
 conjunctive = ($ Conjunctive)
 disjunctive = ($ Disjunctive)
 
-anf :: Function -> Function
-anf fun = Function params expr where
+anf :: Definitions -> Function -> Function
+anf defs fun = Function params expr where
     params = paramsOf fun
     expr = case terms of
         [] -> Const False
         ct -> foldl1 Xor ct
-    terms = keep $ zip (map term $ argsOf fun) (map head $ columns $ tableOf fun)
+    terms = keep $ zip (map term $ argsOf fun) (map head $ columns $ tableOf defs fun)
     term args = listAnd (map Access $ keep $ zip params args)
     keep = map fst . filter snd
 
@@ -145,24 +151,24 @@ arity (Table t) = truncate $ logBase 2 (fromIntegral (length t))
 
 data PostClass = T0 | T1 | S | M | L deriving (Read, Show, Eq)
 
-check :: PostClass -> Function -> Bool
-check T0 fun = (eval fun) (replicate (arity fun) False) == False
-check T1 fun = (eval fun) (replicate (arity fun) True)  == True
-check S  fun = and (map check1 (argsOf fun))
-    where check1 args = not (eval fun args) == eval fun (map not args)
-check M  fun = check1 (tableOf fun)
+check :: PostClass -> Definitions -> Function -> Bool
+check T0 defs fun = (eval defs fun) (replicate (arity fun) False) == False
+check T1 defs fun = (eval defs fun) (replicate (arity fun) True)  == True
+check S  defs fun = and (map check1 (argsOf fun))
+    where check1 args = not (eval defs fun args) == eval defs fun (map not args)
+check M  defs fun = check1 (tableOf defs fun)
     where check1 [_] = True
           check1 xs = let (as, bs) = split xs in as <= bs && check1 as && check1 bs
           split xs = splitAt (length xs `div` 2) xs
-check L  fun = let Function _ expr = anf fun in check1 expr
+check L  defs fun = let Function _ expr = anf defs fun in check1 expr
     where check1 (Xor x y) = check1 x && check1 y
           check1 (Const  _) = True
           check1 (Access _) = True
           check1 _ = False
 
-postClasses :: Function -> [PostClass]
-postClasses fun = filter (\c -> check c fun) [T0, T1, S, M, L]
+postClasses :: Definitions -> Function -> [PostClass]
+postClasses defs fun = filter (\c -> check c defs fun) [T0, T1, S, M, L]
 
-complete :: [Function] -> Bool
-complete [] = False
-complete xs = null $ foldr1 intersect $ map postClasses xs
+complete :: Definitions -> [Function] -> Bool
+complete _ [] = False
+complete defs xs = null $ foldr1 intersect $ map (postClasses defs) xs

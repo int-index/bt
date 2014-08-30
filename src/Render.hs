@@ -2,6 +2,7 @@
 module Render where
 
 import Data.Bool
+import Data.List
 
 import Expression
 
@@ -69,6 +70,12 @@ renderExpr = \case
     Nor  x y -> renderBinary "↓" x y
     Ent  x y -> renderBinary "→" x y
     Equ  x y -> renderBinary "~" x y
+    Call name xs -> (name ++ rarx, HLevel) where
+        rarx | null xs   = ""
+             | otherwise = parens
+                         . intercalate ", "
+                         . map (fst . renderExpr)
+                         $ xs
 
 instance Show Expression where
     show = fst . renderExpr

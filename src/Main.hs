@@ -41,13 +41,13 @@ data Command
     | HelpCommand
     | DefineCommand   String
     | UndefineCommand String
-    | ShowCommand (Function -> Function) String
+    | ShowCommand (Definitions -> Function -> Function) String
     | CompareCommand String String
     | ClassCommand String
     | CompleteCommand [String]
     | ListCommand
     | CleanCommand
-    | PredefCommand
+    | ResetCommand
 
 
 talk :: M Bool
@@ -64,9 +64,9 @@ talk = withInputLine ">> " $ \commandString -> do
             CompareCommand name1 name2 -> simply $ handleCompare name1 name2
             ClassCommand name -> simply $ handleClass name
             CompleteCommand names -> simply $ handleComplete names
-            ListCommand   -> simply $ gets (unlines . M.keys) >>= outputLine
-            CleanCommand  -> simply $ put M.empty
-            PredefCommand -> simply $ modify (M.union predef)
+            ListCommand  -> simply $ gets (unlines . M.keys) >>= outputLine
+            CleanCommand -> simply $ put M.empty
+            ResetCommand -> simply $ put predef
 
 parseCommand :: String -> Maybe Command
 parseCommand s = case words s of
@@ -75,7 +75,7 @@ parseCommand s = case words s of
     ["help"] -> Just HelpCommand
     ["define",   name] -> Just (DefineCommand   name)
     ["undefine", name] -> Just (UndefineCommand name)
-    ["show",     name] -> Just (ShowCommand id  name)
+    ["show",     name] -> Just (ShowCommand (const id) name)
     ["show", form, name] -> case form of
        "cnf"   -> Just (ShowCommand (conjunctive nf) name)
        "dnf"   -> Just (ShowCommand (disjunctive nf) name)
@@ -87,7 +87,7 @@ parseCommand s = case words s of
     ("complete":names) -> Just (CompleteCommand names)
     ["list"]  -> Just ListCommand
     ["clean"] -> Just CleanCommand
-    ["predef"] -> Just PredefCommand
+    ["reset"] -> Just ResetCommand
     _ -> Nothing
 
 helpMessage :: String
@@ -105,7 +105,7 @@ helpMessage = unlines
     , "complete [NAME]   -- check whether a function system is complete"
     , "list              -- list defined functions"
     , "clean             -- undefine everything"
-    , "predef            -- define standard functions"
+    , "reset             -- define standard functions"
     ]
 
 handleDefine :: String -> M Bool
@@ -120,21 +120,23 @@ handleUndefine name = gets (M.member name) >>= bool notfound action
     where action = do modify $ M.delete name
                       outputLine "Done!"
 
-handleShow :: (Function -> Function) -> String -> M ()
-handleShow form name = gets (M.lookup name) >>=
-    maybe notfound (outputLine . show . form)
+handleShow :: (Definitions -> Function -> Function) -> String -> M ()
+handleShow form name = get >>= \defs -> maybe notfound
+    (outputLine . show . form defs) (M.lookup name defs)
 
 handleCompare :: String -> String -> M ()
 handleCompare name1 name2
     | name1 == name2 = outputLine "You're kidding, right?"
     | otherwise = get >>= \defs ->
-        let eq = (==) <$> M.lookup name1 defs <*> M.lookup name2 defs
+        let eq = funeq defs <$> M.lookup name1 defs <*> M.lookup name2 defs
         in maybe notfound (outputLine . bool "Different" "Equal") eq
 
 handleClass :: String -> M ()
-handleClass name = gets (M.lookup name) >>=
-    maybe notfound (outputLine . unwords . map show . postClasses)
+handleClass name = get >>= \defs -> maybe notfound
+    (outputLine . unwords . map show . postClasses defs)
+    (M.lookup name defs)
 
 handleComplete :: [String] -> M ()
-handleComplete names = gets (forM names . flip M.lookup) >>=
-    maybe notfound (outputLine . bool "Incomplete" "Complete" . complete)
+handleComplete names = get >>= \defs -> maybe notfound
+    (outputLine . bool "Incomplete" "Complete" . complete defs)
+    (forM names $ \name -> M.lookup name defs)
