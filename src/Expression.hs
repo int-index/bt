@@ -8,6 +8,7 @@ import Control.Monad
 import Data.List
 import Data.Bool
 import Data.Function
+import qualified Data.Map as M
 
 data Expression where
     Const  :: Bool -> Expression
@@ -27,6 +28,22 @@ data Function where
 
 instance Eq Function where
     (==) = (==) `on` tableOf
+
+type Definitions = M.Map String Function
+
+predef = M.fromList
+    [ ("1"   , Table [True ])
+    , ("0"   , Table [False])
+    , ("id"  , Table [False, True])
+    , ("not" , Table [True, False])
+    , ("and" , Table [False, False, False, True ])
+    , ("or"  , Table [False, True , True , True ])
+    , ("xor" , Table [False, True , True , False])
+    , ("nand", Table [True , True , True , False])
+    , ("nor" , Table [True , False, False, False])
+    , ("ent" , Table [True , True , False, True ])
+    , ("equ" , Table [True , False, False, True ])
+    ]
 
 eval :: Function -> [Bool] -> Bool
 eval (Function params e) args = value e where

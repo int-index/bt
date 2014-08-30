@@ -3,7 +3,7 @@ module Main where
 
 import System.Console.Haskeline hiding (complete)
 import qualified Data.Map as M
-import Control.Applicative hiding (Const)
+import Control.Applicative
 import Control.Monad.State.Strict
 import Data.Bool
 
@@ -12,7 +12,7 @@ import Parser (parse)
 import Render ()
 
 main :: IO ()
-main = runInputT settings (evalStateT (hello >> loop talk bye) M.empty) where
+main = runInputT settings (evalStateT (hello >> loop talk bye) predef) where
     settings = Settings noCompletion Nothing True
 
 loop :: Monad m => m Bool -> m a -> m a
@@ -34,7 +34,6 @@ hello    = outputLine "The Bool Tool"
 bye      = outputLine "Bye!"
 notfound = outputLine "Not found"
 
-type Definitions = M.Map String Function
 
 data Command
     = PassCommand
@@ -68,21 +67,6 @@ talk = withInputLine ">> " $ \commandString -> do
             ListCommand   -> simply $ gets (unlines . M.keys) >>= outputLine
             CleanCommand  -> simply $ put M.empty
             PredefCommand -> simply $ modify (M.union predef)
-
-predef :: Definitions
-predef = M.fromList
-    [ ("1"   , function $ Const True)
-    , ("0"   , function $ Const False)
-    , ("id"  , function $ Access "x")
-    , ("not" , function $ Not  (Access "x"))
-    , ("and" , function $ And  (Access "x") (Access "y"))
-    , ("or"  , function $ Or   (Access "x") (Access "y"))
-    , ("xor" , function $ Xor  (Access "x") (Access "y"))
-    , ("nand", function $ Nand (Access "x") (Access "y"))
-    , ("nor" , function $ Nor  (Access "x") (Access "y"))
-    , ("ent" , function $ Ent  (Access "x") (Access "y"))
-    , ("equ" , function $ Equ  (Access "x") (Access "y"))
-    ]
 
 parseCommand :: String -> Maybe Command
 parseCommand s = case words s of
