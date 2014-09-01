@@ -59,9 +59,10 @@ hlevel = \case
 
 renderExpr :: Expression -> (String, Level)
 renderExpr = \case
+    Access name -> (name, HLevel)
+    {-
     Const True  -> ("1", HLevel)
     Const False -> ("0", HLevel)
-    Access name -> (name, HLevel)
     Not x -> let (s, level) = renderExpr x in ("-" ++ hlevel level s, HLevel)
     And  x y -> renderBinary "&" x y
     Or   x y -> renderBinary "|" x y
@@ -70,6 +71,7 @@ renderExpr = \case
     Nor  x y -> renderBinary "↓" x y
     Ent  x y -> renderBinary "→" x y
     Equ  x y -> renderBinary "~" x y
+    -}
     Call name xs -> (name ++ rarx, HLevel) where
         rarx | null xs   = ""
              | otherwise = parens

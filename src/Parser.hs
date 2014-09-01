@@ -71,31 +71,31 @@ parser :: Parser E.Function
 parser = (E.function <$> pEqu <|> pTable) <* pEnd
 
 pEqu :: Parser E.Expression
-pEqu = sepl pEnt (E.Equ <$ pExpect Equ)
+pEqu = sepl pEnt (E.call_2 "equ" <$ pExpect Equ)
 
 pEnt :: Parser E.Expression
-pEnt = sepr pOr (E.Ent <$ pExpect Ent)
+pEnt = sepr pOr (E.call_2 "ent" <$ pExpect Ent)
 
 pOr :: Parser E.Expression
-pOr = sepl pAnd (E.Or <$ pExpect Or)
+pOr = sepl pAnd (E.call_2 "or" <$ pExpect Or)
 
 pAnd :: Parser E.Expression
-pAnd = sepl pOther (E.And <$ pExpect And)
+pAnd = sepl pOther (E.call_2 "and" <$ pExpect And)
 
 pOther :: Parser E.Expression
 pOther = sepl (pNot <*> pPrim) $ pHead >>= \case
-    Xor  -> return (E.Xor)
-    Nand -> return (E.Nand)
-    Nor  -> return (E.Nor)
+    Xor  -> return (E.call_2 "xor")
+    Nand -> return (E.call_2 "nand")
+    Nor  -> return (E.call_2 "nor")
     _ -> mzero
 
 pNot :: Parser (E.Expression -> E.Expression)
-pNot = maybe id (const E.Not) <$> optional (pExpect Not)
+pNot = maybe id (const $ E.call_1 "not") <$> optional (pExpect Not)
 
 pPrim :: Parser E.Expression
 pPrim = pHead >>= \case
-    One  -> return (E.Const True)
-    Zero -> return (E.Const False)
+    One  -> return (E.call_0 "1")
+    Zero -> return (E.call_0 "0")
     Name s -> return (E.Access s)
     LParen -> pEqu <* pExpect RParen
     _ -> mzero

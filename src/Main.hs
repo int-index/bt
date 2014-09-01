@@ -64,7 +64,7 @@ talk = withInputLine ">> " $ \commandString -> do
             CompareCommand name1 name2 -> simply $ handleCompare name1 name2
             ClassCommand name -> simply $ handleClass name
             CompleteCommand names -> simply $ handleComplete names
-            ListCommand  -> simply $ gets (unlines . M.keys) >>= outputLine
+            ListCommand  -> simply $ get >>= outputLine . unlines . M.keys
             CleanCommand -> simply $ put M.empty
             ResetCommand -> simply $ put predef
 
@@ -116,9 +116,9 @@ handleDefine name = withInputLine (name ++ " = ") $ \s ->
                        outputLine "Done!"
 
 handleUndefine :: String -> M ()
-handleUndefine name = gets (M.member name) >>= bool notfound action
-    where action = do modify $ M.delete name
-                      outputLine "Done!"
+handleUndefine name = get >>= \defs -> bool notfound
+    (modify (M.delete name) >> outputLine "Done!")
+    (M.member name defs)
 
 handleShow :: (Definitions -> Function -> Function) -> String -> M ()
 handleShow form name = get >>= \defs -> maybe notfound
