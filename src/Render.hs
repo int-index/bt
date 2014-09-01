@@ -60,18 +60,17 @@ hlevel = \case
 renderExpr :: Expression -> (String, Level)
 renderExpr = \case
     Access name -> (name, HLevel)
-    {-
-    Const True  -> ("1", HLevel)
-    Const False -> ("0", HLevel)
-    Not x -> let (s, level) = renderExpr x in ("-" ++ hlevel level s, HLevel)
-    And  x y -> renderBinary "&" x y
-    Or   x y -> renderBinary "|" x y
-    Xor  x y -> renderBinary "+" x y
-    Nand x y -> renderBinary "↑" x y
-    Nor  x y -> renderBinary "↓" x y
-    Ent  x y -> renderBinary "→" x y
-    Equ  x y -> renderBinary "~" x y
-    -}
+    Call "1"   []  -> ("1", HLevel)
+    Call "0"   []  -> ("0", HLevel)
+    Call "not" [x] -> let (s, level) = renderExpr x
+                      in ("-" ++ hlevel level s, HLevel)
+    Call "and" [x, y] -> renderBinary "&" x y
+    Call "or"  [x, y] -> renderBinary "|" x y
+    Call "xor" [x, y] -> renderBinary "+" x y
+    Call "nand"[x, y] -> renderBinary "↑" x y
+    Call "nor" [x, y] -> renderBinary "↓" x y
+    Call "ent" [x, y] -> renderBinary "→" x y
+    Call "equ" [x, y] -> renderBinary "~" x y
     Call name xs -> (name ++ rarx, HLevel) where
         rarx | null xs   = ""
              | otherwise = parens
