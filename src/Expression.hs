@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, LambdaCase #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Expression where
 
@@ -10,13 +10,13 @@ import Data.Bool
 import Data.Function
 import qualified Data.Map as M
 
-data Expression where
-    Access :: String -> Expression
-    Call :: String -> [Expression] -> Expression
+data Expression
+    = Access String
+    | Call   String [Expression]
 
-data Function where
-    Function :: [String] -> Expression -> Function
-    Table :: [Bool] -> Function
+data Function
+    = Function [String] Expression
+    | Table    [Bool]
 
 funeq :: Definitions -> Function -> Function -> Bool
 funeq defs = (==) `on` (tableOf defs)
