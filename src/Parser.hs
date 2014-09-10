@@ -1,121 +1,76 @@
-{-# LANGUAGE MultiWayIf, LambdaCase #-}
+{-# LANGUAGE LambdaCase, TupleSections #-}
 module Parser where
 
-import Data.Char
 import Control.Applicative
-import Control.Monad
-import Control.Monad.State
+import Data.List
+import Data.Ord
+import qualified Data.Map as M
+
+import Text.Parser.Token
+import Text.Parser.Token.Style
+import Text.Parser.Combinators
+import Text.Parser.Expression
+import qualified Text.Parsec as Parsec
 
 import qualified Expression as E
-
-data Token = One    | Zero
-           | LParen | RParen
-           | LSqbr  | RSqbr
-           | Not  | And | Or  | Xor
-           | Nand | Nor | Ent | Equ
-           | Name String
-           | Bad Char
-           deriving (Eq, Show)
-
-tokenize :: String -> [Token]
-tokenize [] = []
-tokenize (c:cs) = case c of
-    '1' -> One  : rt
-    '0' -> Zero : rt
-    '(' -> LParen : rt
-    ')' -> RParen : rt
-    '[' -> LSqbr  : rt
-    ']' -> RSqbr  : rt
-    '-' -> Not  : rt
-    '&' -> And  : rt
-    '|' -> Or   : rt
-    '+' -> Xor  : rt
-    '↑' -> Nand : rt
-    '↓' -> Nor  : rt
-    '→' -> Ent  : rt
-    '~' -> Equ  : rt
-    _ -> if | isAlpha c -> tokenizeName c cs
-            | isSpace c -> rt
-            | otherwise -> Bad c : rt
-    where rt = tokenize cs
-
-tokenizeName :: Char -> String -> [Token]
-tokenizeName c cs = mangle (c:x) : tokenize xs
-    where (x, xs) = span isAlphaNum cs
-          mangle "not"  = Not
-          mangle "and"  = And
-          mangle "or"   = Or
-          mangle "xor"  = Xor
-          mangle "nand" = Nand
-          mangle "nor"  = Nor
-          mangle "ent"  = Ent
-          mangle "equ"  = Equ
-          mangle cs = Name cs
+import qualified Operator   as O
 
 parse :: String -> Maybe E.Function
-parse cs = evalStateT parser (tokenize cs)
+parse = eitherToMaybe . Parsec.parse (whiteSpace *> pFunction <* eof) ""
+    where eitherToMaybe (Right x) = Just x
+          eitherToMaybe _ = Nothing
 
-fallback a = (<|> pure a)
+pFunction :: Parsec.Parsec String () E.Function
+pFunction = pTable <|> E.function <$> pExpression
 
-sepr elemTr opTr = tr where
-    tr = elemTr >>= next
-    next a = fallback a $ opTr <*> return a <*> tr
+pTable = E.Table <$> brackets (Parsec.many bin)
+       where one  = Parsec.char '1'
+             zero = Parsec.char '0'
+             bin  = True <$ one <|> False <$ zero
 
-sepl elemTr opTr = elemTr >>= next where
-    next a = fallback a $ (opTr <*> return a <*> elemTr) >>= next
+pExpression = buildExpressionParser table pTerm
 
+pTerm  =  parens pExpression
+      <|> pPrim
+      <|> pNullary
 
-type Parser a = StateT [Token] Maybe a
+pPrim = do
+    name <- ident emptyIdents
+    pCall name <|> return (E.Access name)
 
-parser :: Parser E.Function
-parser = (E.function <$> pEqu <|> pTable) <* pEnd
+pCall name = do
+    params <- parens (pExpression `sepBy` comma)
+    return $ E.Call name params
 
-pEqu :: Parser E.Expression
-pEqu = sepl pEnt (E.call_2 "equ" <$ pExpect Equ)
+pNullary = token
+         $ choice . map mkParser
+         $ sortBy (flip . comparing $ length . snd)
+         $ M.toList O.operators >>= gather
+    where gather (name, O.NullaryOperator aliases) = (name,) <$> aliases
+          gather _ = []
+          mkParser (r, s) = try (E.call_0 r <$ Parsec.string s)
 
-pEnt :: Parser E.Expression
-pEnt = sepr pOr (E.call_2 "ent" <$ pExpect Ent)
+table = groupByFst
+      $ M.toList O.operators >>= gather
+    where gather (name, O.UnaryOperator  aliases (i, fixity)) =
+            (\alias -> (i, mkOperatorUnary  fixity name alias)) <$> aliases
+          gather (name, O.BinaryOperator aliases (i, fixity)) =
+            (\alias -> (i, mkOperatorBinary fixity name alias)) <$> aliases
+          gather _ = []
+          mkOperatorUnary  fixity name alias
+                = unaryWrap fixity $ E.call_1 name <$ op alias
+          mkOperatorBinary fixity name alias
+                = Infix (E.call_2 name <$ op alias) (binaryWrap fixity)
+          unaryWrap = \case
+               O.Prefix  -> Prefix
+               O.Postfix -> Postfix
+          binaryWrap = \case
+               O.Leftfix  -> AssocLeft
+               O.Rightfix -> AssocRight
+               O.Nonfix   -> AssocNone
 
-pOr :: Parser E.Expression
-pOr = sepl pAnd (E.call_2 "or" <$ pExpect Or)
+op :: String -> Parsec.Parsec String () String
+op = try . token . Parsec.string
 
-pAnd :: Parser E.Expression
-pAnd = sepl pOther (E.call_2 "and" <$ pExpect And)
-
-pOther :: Parser E.Expression
-pOther = sepl (pNot <*> pPrim) $ pHead >>= \case
-    Xor  -> return (E.call_2 "xor")
-    Nand -> return (E.call_2 "nand")
-    Nor  -> return (E.call_2 "nor")
-    _ -> mzero
-
-pNot :: Parser (E.Expression -> E.Expression)
-pNot = maybe id (const $ E.call_1 "not") <$> optional (pExpect Not)
-
-pPrim :: Parser E.Expression
-pPrim = pHead >>= \case
-    One  -> return (E.call_0 "1")
-    Zero -> return (E.call_0 "0")
-    Name s -> return (E.Access s)
-    LParen -> pEqu <* pExpect RParen
-    _ -> mzero
-
-pTable :: Parser E.Function
-pTable = pExpect LSqbr *> (E.Table <$> many pX) <* pExpect RSqbr where
-    pX = pHead >>= \case
-        One  -> return True
-        Zero -> return False
-        _ -> mzero
-
-pExpect :: Token -> Parser Token
-pExpect a = mfilter (==a) pHead
-
-pHead :: Parser Token
-pHead = StateT $ \case
-    (c:cs) -> return (c, cs)
-    _ -> mzero
-
-pEnd :: Parser ()
-pEnd = StateT $ \case
-    [] -> return ((), [])
-    _ -> mzero
+groupByFst :: Ord k => [(k, a)] -> [[a]]
+groupByFst = map snd . M.toList . M.fromListWith (++) . map (\(k,a) -> (k,[a]))

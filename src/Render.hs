@@ -1,19 +1,14 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase, StandaloneDeriving #-}
 module Render where
 
 import Data.Bool
 import Data.List
 
+import Operator
 import Expression
-
+{-
 parens :: String -> String
 parens = ("("++) . (++")")
-
-data Fixity
-    = LFix
-    | RFix
-    | NFix
-    deriving Eq
 
 data Level
     = ALevel Integer Fixity
@@ -80,9 +75,12 @@ renderExpr = \case
 
 instance Show Expression where
     show = fst . renderExpr
+-}
 
 instance Show Function where
     show (Function params e)
         | null params = show e
         | otherwise   = unwords params ++ " . " ++ show e
     show (Table t) = "[" ++ map (bool '0' '1') t ++ "]"
+
+deriving instance Show Expression
