@@ -14,16 +14,18 @@ import qualified Text.Parsec as Parsec
 
 import qualified Expression as E
 import qualified Operator   as O
+import qualified Tree       as T
 
-parse :: String -> Maybe E.Function
-parse = eitherToMaybe . Parsec.parse (whiteSpace *> pFunction <* eof) ""
-    where eitherToMaybe (Right x) = Just x
-          eitherToMaybe _ = Nothing
+parse :: String -> Either Parsec.ParseError E.Function
+parse = Parsec.parse (whiteSpace *> pFunction <* eof) ""
 
 pFunction :: Parsec.Parsec String () E.Function
 pFunction = pTable <|> E.function <$> pExpression
 
-pTable = E.tree <$> brackets (Parsec.many bin)
+pTable = do bs <- brackets (Parsec.many bin)
+            case T.fromList bs of
+                Nothing -> Parsec.parserFail "broken table"
+                Just t  -> return (E.Tree t)
        where one  = Parsec.char '1'
              zero = Parsec.char '0'
              bin  = True <$ one <|> False <$ zero

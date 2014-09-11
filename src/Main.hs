@@ -111,9 +111,10 @@ helpMessage = unlines
 handleDefine :: String -> M Bool
 handleDefine name = withInputLine (name ++ " = ") $ \s ->
     simply $ case parse s of
-        Nothing  -> outputLine "Couldn't parse the expression..."
-        Just fun -> do modify $ M.insert name fun
-                       outputLine "Done!"
+        Left  msg -> do outputLine "Couldn't parse the expression..."
+                        outputLine (show msg)
+        Right fun -> do modify $ M.insert name fun
+                        outputLine "Done!"
 
 handleUndefine :: String -> M ()
 handleUndefine name = get >>= \defs -> bool notfound
