@@ -78,6 +78,10 @@ tablify defs fun = tree (tableOf defs fun)
 tableOf :: Definitions -> Function -> [Bool]
 tableOf defs fun = map (eval defs fun) (argsOf fun)
 
+treeOf :: Definitions -> Function -> T.Tree
+treeOf _ (Tree t) = t
+treeOf defs fun   = T.unsafeFromList (tableOf defs fun)
+
 nameStream :: [String]
 nameStream = [1..] >>= flip replicateM alphabet
     where alphabet = ['a'..'z']
@@ -152,10 +156,9 @@ check T0 defs fun = (eval defs fun) (replicate (arity fun) False) == False
 check T1 defs fun = (eval defs fun) (replicate (arity fun) True)  == True
 check S  defs fun = and (map check1 (argsOf fun))
     where check1 args = not (eval defs fun args) == eval defs fun (map not args)
-check M  defs fun = check1 (tableOf defs fun)
-    where check1 [_] = True
-          check1 xs = let (as, bs) = split xs in as <= bs && check1 as && check1 bs
-          split xs = splitAt (length xs `div` 2) xs
+check M  defs fun = check1 (treeOf defs fun)
+    where check1 (T.Node _) = True
+          check1 (T.Joint f t) = check1 f && check1 t && on (<=) T.toList f t
 check L  defs fun = (check1 . snd) (anf' defs fun)
     where check1 = and . map (liftA2 (||) null single)
           single [_] = True
