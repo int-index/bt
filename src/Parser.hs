@@ -23,7 +23,7 @@ parse = eitherToMaybe . Parsec.parse (whiteSpace *> pFunction <* eof) ""
 pFunction :: Parsec.Parsec String () E.Function
 pFunction = pTable <|> E.function <$> pExpression
 
-pTable = E.Table <$> brackets (Parsec.many bin)
+pTable = E.tree <$> brackets (Parsec.many bin)
        where one  = Parsec.char '1'
              zero = Parsec.char '0'
              bin  = True <$ one <|> False <$ zero

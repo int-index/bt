@@ -6,6 +6,8 @@ import Data.List
 
 import Operator
 import Expression
+import qualified Tree as T
+
 {-
 parens :: String -> String
 parens = ("("++) . (++")")
@@ -81,6 +83,6 @@ instance Show Function where
     show (Function params e)
         | null params = show e
         | otherwise   = unwords params ++ " . " ++ show e
-    show (Table t) = "[" ++ map (bool '0' '1') t ++ "]"
+    show (Tree t) = "[" ++ map (bool '0' '1') (T.toList t) ++ "]"
 
 deriving instance Show Expression

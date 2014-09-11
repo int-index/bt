@@ -3,12 +3,13 @@
 module Expression where
 
 import Control.Applicative
-import Control.Lens
 import Control.Monad
 import Data.List
 import Data.Bool
 import Data.Function
 import qualified Data.Map as M
+
+import qualified Tree as T
 
 data Expression
     = Access String
@@ -16,7 +17,7 @@ data Expression
 
 data Function
     = Function [String] Expression
-    | Table    [Bool]
+    | Tree     T.Tree
 
 funeq :: Definitions -> Function -> Function -> Bool
 funeq defs = (==) `on` (tableOf defs)
@@ -32,19 +33,22 @@ call_2 s x y = Call s [x, y]
 
 type Definitions = M.Map String Function
 
+tree :: [Bool] -> Function
+tree = Tree . T.unsafeFromList
+
 predef :: Definitions
 predef = M.fromList
-    [ ("1"   , Table [True ])
-    , ("0"   , Table [False])
-    , ("id"  , Table [False, True])
-    , ("not" , Table [True, False])
-    , ("and" , Table [False, False, False, True ])
-    , ("or"  , Table [False, True , True , True ])
-    , ("xor" , Table [False, True , True , False])
-    , ("nand", Table [True , True , True , False])
-    , ("nor" , Table [True , False, False, False])
-    , ("ent" , Table [True , True , False, True ])
-    , ("equ" , Table [True , False, False, True ])
+    [ ("1"   , tree [True])
+    , ("0"   , tree [False])
+    , ("id"  , tree [False, True])
+    , ("not" , tree [True, False])
+    , ("and" , tree [False, False, False, True ])
+    , ("or"  , tree [False, True , True , True ])
+    , ("xor" , tree [False, True , True , False])
+    , ("nand", tree [True , True , True , False])
+    , ("nor" , tree [True , False, False, False])
+    , ("ent" , tree [True , True , False, True ])
+    , ("equ" , tree [True , False, False, True ])
     ]
 
 eval :: Definitions -> Function -> [Bool] -> Bool
@@ -56,9 +60,7 @@ eval defs (Function params e) args = value e where
     value (Call name xs) = case M.lookup name defs of
         Nothing  -> error $ "eval: Bad call " ++ name
         Just fun -> eval defs fun (map value xs)
-eval _ (Table t) args = maybe (error "eval: Bad table") id $ t ^? ix (indexOf args)
-    where indexOf = sum . zipWith (*) (powersOf 2) . reverse . map (bool 0 1)
-          powersOf n = iterate (*n) 1
+eval _ (Tree t)  args = maybe (error "eval: Bad tree") id (T.visit t args)
 
 function :: Expression -> Function
 function e = Function (names e) e
@@ -71,7 +73,7 @@ names' (Access name) = [name]
 names' (Call _ xs) = concatMap names' xs
 
 tablify :: Definitions -> Function -> Function
-tablify defs fun = Table (tableOf defs fun)
+tablify defs fun = tree (tableOf defs fun)
 
 tableOf :: Definitions -> Function -> [Bool]
 tableOf defs fun = map (eval defs fun) (argsOf fun)
@@ -141,7 +143,7 @@ variants n = (:) <$> [False, True] <*> variants (n - 1)
 
 arity :: Function -> Int
 arity (Function params _) = length params
-arity (Table t) = truncate $ logBase 2 (fromIntegral (length t))
+arity (Tree t) = T.depth t
 
 data PostClass = T0 | T1 | S | M | L deriving (Read, Show, Eq)
 
