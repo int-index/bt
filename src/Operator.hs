@@ -12,12 +12,6 @@ data Operator = BinaryOperator  [String] (Int, Fixity2)
               | UnaryOperator   [String] (Int, Fixity1)
               | NullaryOperator [String]
 
-aliases :: Operator -> [String]
-aliases = \case
-    BinaryOperator  as _ -> as
-    UnaryOperator   as _ -> as
-    NullaryOperator as   -> as
-
 operators :: Operators
 operators = M.fromList
     [ ("true" , NullaryOperator ["1"])
