@@ -20,8 +20,8 @@ aliases = \case
 
 operators :: Operators
 operators = M.fromList
-    [ ("1"   , NullaryOperator ["1"])
-    , ("0"   , NullaryOperator ["0"])
+    [ ("true" , NullaryOperator ["1"])
+    , ("false", NullaryOperator ["0"])
     , ("id"  , UnaryOperator   ["#"] (1, Postfix))
     , ("not" , UnaryOperator   ["-"] (2, Prefix))
     , ("and" , BinaryOperator  ["&"] (4, Leftfix))

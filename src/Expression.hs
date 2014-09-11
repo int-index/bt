@@ -38,8 +38,8 @@ tree = Tree . T.unsafeFromList
 
 predef :: Definitions
 predef = M.fromList
-    [ ("1"   , tree [True])
-    , ("0"   , tree [False])
+    [ ("true" , tree [True])
+    , ("false", tree [False])
     , ("id"  , tree [False, True])
     , ("not" , tree [True, False])
     , ("and" , tree [False, False, False, True ])
@@ -103,8 +103,8 @@ nf form defs fun = Function params (pass2 . map pass1 . map (map pass0) $ expr) 
         Conjunctive -> (listAnd, listOr, not, id)
         Disjunctive -> (listOr, listAnd, id, not)
 
-    listOr  = foldl0 (call_2 "or")  (call_0 "0")
-    listAnd = foldl0 (call_2 "and") (call_0 "1")
+    listOr  = foldl0 (call_2 "or")  (call_0 "false")
+    listAnd = foldl0 (call_2 "and") (call_0 "true")
 
 
 conjunctive = ($ Conjunctive)
@@ -119,8 +119,8 @@ anf :: Definitions -> Function -> Function
 anf defs fun = Function params (pass2 . map pass1 . map (map pass0) $ expr)
     where (params, expr) = anf' defs fun
           pass0 = Access
-          pass1 = foldl0 (call_2 "and") (call_0 "1")
-          pass2 = foldl0 (call_2 "xor") (call_0 "0")
+          pass1 = foldl0 (call_2 "and") (call_0 "true")
+          pass2 = foldl0 (call_2 "xor") (call_0 "false")
 
 anf' :: Definitions -> Function -> ([String], [[String]])
 anf' defs fun = (params, expr) where

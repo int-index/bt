@@ -3,10 +3,13 @@ module Render where
 
 import Data.Bool
 import Data.List
+import Data.Maybe
 
 import Operator
 import Expression
 import qualified Tree as T
+
+import qualified Data.Map as M
 
 {-
 parens :: String -> String
@@ -85,8 +88,12 @@ rFunction (Function params e)
     | otherwise   = unwords params ++ " . " ++ rExpression e
 rFunction (Tree t) = "[" ++ map (bool '0' '1') (T.toList t) ++ "]"
 
+rAlias :: String -> String
+rAlias name = maybe name id
+            $ do op <- M.lookup name operators
+                 listToMaybe (aliases op)
 
 rExpression :: Expression -> String
 rExpression (Access name)  = name
-rExpression (Call name []) = name
+rExpression (Call name []) = rAlias name
 rExpression (Call name xs) = name ++ "(" ++ intercalate ", " (map rExpression xs) ++ ")"
