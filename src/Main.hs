@@ -9,7 +9,7 @@ import Data.Bool
 
 import Expression
 import Parser (parse)
-import Render ()
+import Render (rFunction)
 
 main :: IO ()
 main = runInputT settings (evalStateT (hello >> loop talk bye) predef) where
@@ -123,7 +123,7 @@ handleUndefine name = get >>= \defs -> bool notfound
 
 handleShow :: (Definitions -> Function -> Function) -> String -> M ()
 handleShow form name = get >>= \defs -> maybe notfound
-    (outputLine . show . form defs) (M.lookup name defs)
+    (outputLine . rFunction . form defs) (M.lookup name defs)
 
 handleCompare :: String -> String -> M ()
 handleCompare name1 name2

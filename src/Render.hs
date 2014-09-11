@@ -1,4 +1,4 @@
-{-# LANGUAGE LambdaCase, StandaloneDeriving #-}
+{-# LANGUAGE LambdaCase #-}
 module Render where
 
 import Data.Bool
@@ -79,10 +79,14 @@ instance Show Expression where
     show = fst . renderExpr
 -}
 
-instance Show Function where
-    show (Function params e)
-        | null params = show e
-        | otherwise   = unwords params ++ " . " ++ show e
-    show (Tree t) = "[" ++ map (bool '0' '1') (T.toList t) ++ "]"
+rFunction :: Function -> String
+rFunction (Function params e)
+    | null params = rExpression e
+    | otherwise   = unwords params ++ " . " ++ rExpression e
+rFunction (Tree t) = "[" ++ map (bool '0' '1') (T.toList t) ++ "]"
 
-deriving instance Show Expression
+
+rExpression :: Expression -> String
+rExpression (Access name)  = name
+rExpression (Call name []) = name
+rExpression (Call name xs) = name ++ "(" ++ intercalate ", " (map rExpression xs) ++ ")"
