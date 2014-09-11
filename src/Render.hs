@@ -1,4 +1,4 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase, TupleSections #-}
 module Render where
 
 import Data.Bool
@@ -84,16 +84,47 @@ instance Show Expression where
 
 rFunction :: Function -> String
 rFunction (Function params e)
-    | null params = rExpression e
-    | otherwise   = unwords params ++ " . " ++ rExpression e
+    | null params = discarding rExpression e
+    | otherwise   = unwords params ++ " . " ++ discarding rExpression e
 rFunction (Tree t) = "[" ++ map (bool '0' '1') (T.toList t) ++ "]"
 
-rAlias :: String -> String
-rAlias name = maybe name id
-            $ do op <- M.lookup name operators
-                 listToMaybe (aliases op)
+rExpression :: Expression -> Leveling String
+rExpression (Access name)  = solid name
+rExpression (Call name xs) = case map rExpression xs of
+    [   ] -> rNullary name
+    [x  ] -> rUnary   name x
+    [x,y] -> rBinary  name x y
+    args  -> rCall    name args
 
-rExpression :: Expression -> String
-rExpression (Access name)  = name
-rExpression (Call name []) = rAlias name
-rExpression (Call name xs) = name ++ "(" ++ intercalate ", " (map rExpression xs) ++ ")"
+
+aliasLookup :: String -> Maybe String
+aliasLookup name = M.lookup name operators >>= \op -> listToMaybe (aliases op)
+
+rNullary :: String -> Leveling String
+rNullary name = maybe (rCall name []) solid
+              $ aliasLookup name
+
+-- TODO
+rUnary :: String -> Leveling String -> Leveling String
+rUnary name x = rCall name [x]
+
+-- TODO
+rBinary :: String -> Leveling String -> Leveling String -> Leveling String
+rBinary name x y = rCall name [x, y]
+
+rCall :: String -> [Leveling String] -> Leveling String
+rCall name xs = solid $ name ++ parens (intercalate ", " $ discarding xs)
+
+parens :: String -> String
+parens s = "(" ++ s ++ ")"
+
+solid = (,Solid)
+
+discarding :: Functor f => f (a, b) -> f a
+discarding = fmap fst
+
+data Level = Solid
+           | L1 Int Fixity1
+           | L2 Int Fixity2
+
+type Leveling t = (t, Level)
