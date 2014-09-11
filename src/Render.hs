@@ -4,6 +4,8 @@ module Render where
 import Data.Bool
 import Data.List
 import Data.Maybe
+import Data.Monoid
+import Data.Foldable
 
 import Operator
 import Expression
@@ -90,27 +92,36 @@ rFunction (Tree t) = "[" ++ map (bool '0' '1') (T.toList t) ++ "]"
 
 rExpression :: Expression -> Leveling String
 rExpression (Access name)  = solid name
-rExpression (Call name xs) = case map rExpression xs of
-    [   ] -> rNullary name
-    [x  ] -> rUnary   name x
-    [x,y] -> rBinary  name x y
-    args  -> rCall    name args
+rExpression (Call name xs) = maybe (rCall name args) id mresult
+    where args = map rExpression xs
+          mresult  = do
+              op <- M.lookup name operators
+              getFirst $ foldMap (\r -> First (r name op args)) handlers
+          handlers = [rNullary, rUnary, rBinary]
 
+alias1 = listToMaybe . aliases
 
-aliasLookup :: String -> Maybe String
-aliasLookup name = M.lookup name operators >>= \op -> listToMaybe (aliases op)
+type Handler = String -> Operator -> [Leveling String] -> Maybe (Leveling String)
 
-rNullary :: String -> Leveling String
-rNullary name = maybe (rCall name []) solid
-              $ aliasLookup name
+rNullary :: Handler
+rNullary name op args = do
+    [   ] <- Just args
+    alias <- alias1 op
+    return (solid alias)
 
 -- TODO
-rUnary :: String -> Leveling String -> Leveling String
-rUnary name x = rCall name [x]
+rUnary :: Handler
+rUnary name op args = do
+    [ x ] <- Just args
+    alias <- alias1 op
+    Nothing
 
 -- TODO
-rBinary :: String -> Leveling String -> Leveling String -> Leveling String
-rBinary name x y = rCall name [x, y]
+rBinary :: Handler
+rBinary name op args = do
+    [x,y] <- Just args
+    alias <- alias1 op
+    Nothing
 
 rCall :: String -> [Leveling String] -> Leveling String
 rCall name xs = solid $ name ++ parens (intercalate ", " $ discarding xs)
