@@ -1,6 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE KindSignatures, DataKinds, TypeFamilies #-}
+{-# LANGUAGE TypeFamilies #-}
 module Analysis where
 
 import Control.Applicative
@@ -25,14 +25,16 @@ nmap3 f g h = f . fmap (g . fmap h)
 -- Conjunctive, disjunctive and algebraic normal forms
 -- 
 
-data Form = Conjunctive | Disjunctive | Algebraic
+data Conjunctive
+data Disjunctive
+data Algebraic
 
-class NF (a :: Form) where
+class NF a where
     data family RepNF a :: *
     reifyNF :: RepNF a -> Function
     normalize :: Definitions -> Function -> RepNF a
 
-nf :: forall (form :: Form) . NF form => Proxy form -> Definitions -> Function -> Function
+nf :: forall form . NF form => Proxy form -> Definitions -> Function -> Function
 nf Proxy defs fun = reifyNF (normalize defs fun :: RepNF form)
 
 conjunctive f = f (Proxy :: Proxy Conjunctive)
