@@ -16,7 +16,7 @@ data Expression
 
 data Function
     = Function [String] Expression
-    | Tree     T.Tree
+    | Tree     (T.Tree Bool)
 
 funeq :: Definitions -> Function -> Function -> Bool
 funeq defs = (==) `on` (tableOf defs)
@@ -77,7 +77,7 @@ tablify defs fun = tree (tableOf defs fun)
 tableOf :: Definitions -> Function -> [Bool]
 tableOf defs fun = map (eval defs fun) (argsOf fun)
 
-treeOf :: Definitions -> Function -> T.Tree
+treeOf :: Definitions -> Function -> (T.Tree Bool)
 treeOf _ (Tree t) = t
 treeOf defs fun   = T.unsafeFromList (tableOf defs fun)
 
