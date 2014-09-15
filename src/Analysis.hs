@@ -1,10 +1,13 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE KindSignatures, DataKinds, TypeFamilies #-}
 module Analysis where
 
 import Control.Applicative
 import Data.List
 import Data.Bool
 import Data.Function
+import Data.Proxy
 
 import Expression
 
@@ -14,48 +17,68 @@ foldl0 f b = \case
     [] -> b
     xs -> foldl1 f xs
 
+-- nested map
+nmap3 f g h = f . fmap (g . fmap h)
+
+
 --
 -- Conjunctive, disjunctive and algebraic normal forms
 -- 
 
-data Form = Conjunctive | Disjunctive
+data Form = Conjunctive | Disjunctive | Algebraic
 
-nf :: Form -> Definitions -> Function -> Function
-nf form defs fun = Function params (pass2 . map pass1 . map (map pass0) $ expr) where
-    params = paramsOf fun
-    args   = argsOf   fun
-    expr = map term $ filter (not1 . eval defs fun) args
-    term = zipWith prim params
-    prim p = bool (Right p) (Left p) . not2
+class NF (a :: Form) where
+    data family RepNF a :: *
+    reifyNF :: RepNF a -> Function
+    normalize :: Definitions -> Function -> RepNF a
 
-    pass0 = either (call_1 "not" . Access) Access
+nf :: forall (form :: Form) . NF form => Proxy form -> Definitions -> Function -> Function
+nf Proxy defs fun = reifyNF (normalize defs fun :: RepNF form)
 
-    (pass2, pass1, not1, not2) = case form of
-        Conjunctive -> (listAnd, listOr, not, id)
-        Disjunctive -> (listOr, listAnd, id, not)
-
-    listOr  = foldl0 (call_2 "or")  (call_0 "false")
-    listAnd = foldl0 (call_2 "and") (call_0 "true")
+conjunctive f = f (Proxy :: Proxy Conjunctive)
+disjunctive f = f (Proxy :: Proxy Disjunctive)
+algebraic   f = f (Proxy :: Proxy Algebraic)
 
 
-conjunctive = ($ Conjunctive)
-disjunctive = ($ Disjunctive)
+listOr  = foldl0 (call_2 "or")  (call_0 "false")
+listXor = foldl0 (call_2 "xor") (call_0 "false")
+listAnd = foldl0 (call_2 "and") (call_0 "true")
 
-anf :: Definitions -> Function -> Function
-anf defs fun = Function params (pass2 . map pass1 . map (map pass0) $ expr)
-    where (params, expr) = anf' defs fun
-          pass0 = Access
-          pass1 = foldl0 (call_2 "and") (call_0 "true")
-          pass2 = foldl0 (call_2 "xor") (call_0 "false")
 
-anf' :: Definitions -> Function -> ([String], [[String]])
-anf' defs fun = (params, expr) where
-    params = paramsOf fun
-    args   = argsOf   fun
-    table  = tableOf defs fun
-    expr = keep (map (keep params) args) (map head $ columns table)
-    keep xs ys = map fst . filter snd $ zip xs ys
+instance NF Conjunctive where
+    data RepNF Conjunctive = CNF [String] [[Either String String]]
+    normalize defs fun = CNF params expr where
+        params = paramsOf fun
+        args   = argsOf   fun
+        expr = map term $ filter (eval defs fun) args
+        term = zipWith prim params
+        prim p = bool (Right p) (Left p) . not
+    reifyNF (CNF params expr) = Function params (nmap3 listOr listAnd pass0 expr) where
+        pass0 = either (call_1 "not" . Access) Access
 
+instance NF Disjunctive where
+    data RepNF Disjunctive = DNF [String] [[Either String String]]
+    normalize defs fun = DNF params expr where
+        params = paramsOf fun
+        args   = argsOf   fun
+        expr = map term $ filter (not . eval defs fun) args
+        term = zipWith prim params
+        prim p = bool (Right p) (Left p)
+    reifyNF (DNF params expr) = Function params (nmap3 listAnd listOr pass0 expr) where
+        pass0 = either (call_1 "not" . Access) Access
+
+instance NF Algebraic where
+    data RepNF Algebraic = ANF [String] [[String]]
+    normalize defs fun = ANF params expr where
+        params = paramsOf fun
+        args   = argsOf   fun
+        table  = tableOf defs fun
+        expr = keep (map (keep params) args) (map head $ columns table)
+        keep xs ys = map fst . filter snd $ zip xs ys
+    reifyNF (ANF params expr) = Function params (nmap3 listXor listAnd Access expr)
+
+anf_core :: RepNF Algebraic -> [[String]]
+anf_core (ANF _ core) = core
 
 ---
 --- Post's classes and functional completeness
@@ -71,7 +94,7 @@ check S  defs fun = and (map check1 (argsOf fun))
 check M  defs fun = check1 (treeOf defs fun)
     where check1 (T.Node _) = True
           check1 (T.Joint f t) = check1 f && check1 t && on (<=) T.toList f t
-check L  defs fun = (check1 . snd) (anf' defs fun)
+check L  defs fun = check1 (anf_core $ normalize defs fun)
     where check1 = and . map (liftA2 (||) null single)
           single [_] = True
           single  _  = False
@@ -80,5 +103,5 @@ postClasses :: Definitions -> Function -> [PostClass]
 postClasses defs fun = filter (\c -> check c defs fun) [T0, T1, S, M, L]
 
 complete :: Definitions -> [Function] -> Bool
-complete _ [] = False
+complete _    [] = False
 complete defs xs = null $ foldr1 intersect $ map (postClasses defs) xs

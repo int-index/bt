@@ -80,7 +80,7 @@ parseCommand s = case words s of
     ["show", form, name] -> case form of
        "cnf"   -> Just (ShowCommand (conjunctive nf) name)
        "dnf"   -> Just (ShowCommand (disjunctive nf) name)
-       "anf"   -> Just (ShowCommand anf name)
+       "anf"   -> Just (ShowCommand (algebraic   nf) name)
        "table" -> Just (ShowCommand tablify name)
        _ -> Nothing
     ["compare", name1, name2] -> Just (CompareCommand name1 name2)
