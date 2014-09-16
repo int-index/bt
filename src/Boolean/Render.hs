@@ -1,5 +1,4 @@
-{-# LANGUAGE LambdaCase, TupleSections #-}
-module Render where
+module Boolean.Render where
 
 import Data.Bool
 import Data.List
@@ -7,9 +6,9 @@ import Data.Maybe
 import Data.Monoid
 import Data.Foldable
 
-import Operator
-import Expression
-import qualified Tree as T
+import Boolean.Operator
+import Boolean.Expression
+import qualified Data.Boolean.Tree as T
 
 import qualified Data.Map as M
 

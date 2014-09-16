@@ -1,5 +1,4 @@
-{-# LANGUAGE LambdaCase, TupleSections #-}
-module Parser where
+module Boolean.Parser where
 
 import Control.Applicative
 import Data.List
@@ -12,9 +11,9 @@ import Text.Parser.Combinators
 import Text.Parser.Expression
 import qualified Text.Parsec as Parsec
 
-import qualified Expression as E
-import qualified Operator   as O
-import qualified Tree       as T
+import qualified Boolean.Expression as E
+import qualified Boolean.Operator   as O
+import qualified Data.Boolean.Tree  as T
 
 parse :: String -> Either Parsec.ParseError E.Function
 parse = Parsec.parse (whiteSpace *> pFunction <* eof) ""

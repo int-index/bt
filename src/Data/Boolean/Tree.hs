@@ -1,4 +1,4 @@
-module Tree where
+module Data.Boolean.Tree where
 
 import Data.Maybe
 import Control.Applicative

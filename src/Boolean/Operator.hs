@@ -1,5 +1,4 @@
-{-# LANGUAGE LambdaCase #-}
-module Operator where
+module Boolean.Operator where
 
 import qualified Data.Map as M
 

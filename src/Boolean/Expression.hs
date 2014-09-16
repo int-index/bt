@@ -1,6 +1,4 @@
-{-# LANGUAGE LambdaCase #-}
-
-module Expression where
+module Boolean.Expression where
 
 import Control.Applicative
 import Control.Monad
@@ -8,7 +6,7 @@ import Data.List
 import Data.Function
 import qualified Data.Map as M
 
-import qualified Tree as T
+import qualified Data.Boolean.Tree as T
 
 data Expression
     = Access String

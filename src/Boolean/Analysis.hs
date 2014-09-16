@@ -1,7 +1,6 @@
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
-module Analysis where
+module Boolean.Analysis where
 
 import Control.Applicative
 import Data.List
@@ -9,9 +8,8 @@ import Data.Bool
 import Data.Function
 import Data.Proxy
 
-import Expression
-
-import qualified Tree as T
+import Boolean.Expression
+import qualified Data.Boolean.Tree as T
 
 foldl0 f b = \case
     [] -> b

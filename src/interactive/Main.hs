@@ -7,10 +7,10 @@ import Control.Applicative
 import Control.Monad.State.Strict
 import Data.Bool
 
-import Expression
-import Analysis
-import Parser (parse)
-import Render (rFunction)
+import Boolean.Expression
+import Boolean.Analysis
+import Boolean.Parser (parse)
+import Boolean.Render (rFunction)
 
 main :: IO ()
 main = runInputT settings (evalStateT (hello >> loop talk bye) predef) where
