@@ -13,6 +13,7 @@ import qualified Text.Parsec as Parsec
 
 import qualified Boolean.Expression as E
 import qualified Boolean.Operator   as O
+import qualified Boolean.Predef     as P
 import qualified Data.Boolean.Tree  as T
 
 parse :: String -> Either Parsec.ParseError E.Function
@@ -46,13 +47,13 @@ pCall name = do
 pNullary = token
          $ choice . map mkParser
          $ sortBy (flip . comparing $ length . snd)
-         $ M.toList O.operators >>= gather
+         $ M.toList P.operators >>= gather
     where gather (name, O.NullaryOperator aliases) = (name,) <$> aliases
           gather _ = []
           mkParser (r, s) = try (E.call_0 r <$ Parsec.string s)
 
 table = groupByFst
-      $ M.toList O.operators >>= gather
+      $ M.toList P.operators >>= gather
     where gather (name, O.UnaryOperator  aliases (i, fixity)) =
             (\alias -> (i, mkOperatorUnary  fixity name alias)) <$> aliases
           gather (name, O.BinaryOperator aliases (i, fixity)) =

@@ -30,24 +30,6 @@ call_2 s x y = Call s [x, y]
 
 type Definitions = M.Map String Function
 
-tree :: [Bool] -> Function
-tree = Tree . T.unsafeFromList
-
-predef :: Definitions
-predef = M.fromList
-    [ ("true" , tree [True])
-    , ("false", tree [False])
-    , ("id"  , tree [False, True])
-    , ("not" , tree [True, False])
-    , ("and" , tree [False, False, False, True ])
-    , ("or"  , tree [False, True , True , True ])
-    , ("xor" , tree [False, True , True , False])
-    , ("nand", tree [True , True , True , False])
-    , ("nor" , tree [True , False, False, False])
-    , ("ent" , tree [True , True , False, True ])
-    , ("equ" , tree [True , False, False, True ])
-    ]
-
 eval :: Definitions -> Function -> [Bool] -> Bool
 eval defs (Function params e) args = value e where
     value :: Expression -> Bool
@@ -70,7 +52,7 @@ names' (Access name) = [name]
 names' (Call _ xs) = concatMap names' xs
 
 tablify :: Definitions -> Function -> Function
-tablify defs fun = tree (tableOf defs fun)
+tablify defs fun = (Tree . T.unsafeFromList) (tableOf defs fun)
 
 tableOf :: Definitions -> Function -> [Bool]
 tableOf defs fun = map (eval defs fun) (argsOf fun)

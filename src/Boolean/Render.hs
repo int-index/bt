@@ -8,6 +8,8 @@ import Data.Foldable
 
 import Boolean.Operator
 import Boolean.Expression
+
+import qualified Boolean.Predef    as P
 import qualified Data.Boolean.Tree as T
 
 import qualified Data.Map as M
@@ -23,7 +25,7 @@ rExpression (Access name)  = (name, L0)
 rExpression (Call name xs) = maybe (rCall name args) id mresult
     where args = map rExpression xs
           mresult  = do
-              op <- M.lookup name operators
+              op <- M.lookup name P.operators
               getFirst $ foldMap (\r -> First (r op args)) handlers
           handlers = [rNullary, rUnary, rBinary]
 

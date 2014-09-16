@@ -1,26 +1,43 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TemplateHaskell, LambdaCase #-}
 module Main where
 
 import System.Console.Haskeline hiding (complete)
 import qualified Data.Map as M
 import Control.Applicative
 import Control.Monad.State.Strict
+import Control.Lens (declareLenses, (%=), use)
 import Data.Bool
 
 import Boolean.Expression
 import Boolean.Analysis
+import Boolean.Operator
 import Boolean.Parser (parse)
 import Boolean.Render (rFunction)
 
+import qualified Boolean.Predef as Predef
+
+declareLenses [d|
+
+    data UserState = UserState
+        { definitions :: Definitions, operators :: Operators }
+
+                |]
+
+defaultUserState :: UserState
+defaultUserState = UserState Predef.functions Predef.operators
+
+emptyUserState :: UserState
+emptyUserState = UserState M.empty M.empty
+
 main :: IO ()
-main = runInputT settings (evalStateT (hello >> loop talk bye) predef) where
+main = runInputT settings (evalStateT ui defaultUserState) where
     settings = Settings noCompletion Nothing True
+    ui = hello >> loop talk bye
 
 loop :: Monad m => m Bool -> m a -> m a
-loop step end = go
-    where go = step >>= bool end go
+loop step end = fix (\go -> step >>= bool end go)
 
-type M a = StateT Definitions (InputT IO) a
+type M a = StateT UserState (InputT IO) a
 
 withInputLine :: String -> (String -> M Bool) -> M Bool
 withInputLine s a = lift (getInputLine s) >>= maybe (return False) a
@@ -65,9 +82,9 @@ talk = withInputLine ">> " $ \commandString -> do
             CompareCommand name1 name2 -> simply $ handleCompare name1 name2
             ClassCommand name -> simply $ handleClass name
             CompleteCommand names -> simply $ handleComplete names
-            ListCommand  -> simply $ get >>= outputLine . unlines . M.keys
-            CleanCommand -> simply $ put M.empty
-            ResetCommand -> simply $ put predef
+            ListCommand  -> simply $ use definitions >>= outputLine . unlines . M.keys
+            CleanCommand -> simply $ put   emptyUserState
+            ResetCommand -> simply $ put defaultUserState
 
 parseCommand :: String -> Maybe Command
 parseCommand s = case words s of
@@ -114,31 +131,31 @@ handleDefine name = withInputLine (name ++ " = ") $ \s ->
     simply $ case parse s of
         Left  msg -> do outputLine "Couldn't parse the expression..."
                         outputLine (show msg)
-        Right fun -> do modify $ M.insert name fun
+        Right fun -> do definitions %= M.insert name fun
                         outputLine "Done!"
 
 handleUndefine :: String -> M ()
-handleUndefine name = get >>= \defs -> bool notfound
-    (modify (M.delete name) >> outputLine "Done!")
+handleUndefine name = use definitions >>= \defs -> bool notfound
+    (definitions %= M.delete name >> outputLine "Done!")
     (M.member name defs)
 
 handleShow :: (Definitions -> Function -> Function) -> String -> M ()
-handleShow form name = get >>= \defs -> maybe notfound
+handleShow form name = use definitions >>= \defs -> maybe notfound
     (outputLine . rFunction . form defs) (M.lookup name defs)
 
 handleCompare :: String -> String -> M ()
 handleCompare name1 name2
     | name1 == name2 = outputLine "You're kidding, right?"
-    | otherwise = get >>= \defs ->
+    | otherwise = use definitions >>= \defs ->
         let eq = funeq defs <$> M.lookup name1 defs <*> M.lookup name2 defs
         in maybe notfound (outputLine . bool "Different" "Equal") eq
 
 handleClass :: String -> M ()
-handleClass name = get >>= \defs -> maybe notfound
+handleClass name = use definitions >>= \defs -> maybe notfound
     (outputLine . unwords . map show . postClasses defs)
     (M.lookup name defs)
 
 handleComplete :: [String] -> M ()
-handleComplete names = get >>= \defs -> maybe notfound
+handleComplete names = use definitions >>= \defs -> maybe notfound
     (outputLine . bool "Incomplete" "Complete" . complete defs)
     (forM names $ \name -> M.lookup name defs)
