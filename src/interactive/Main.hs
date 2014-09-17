@@ -39,8 +39,8 @@ loop step end = fix (\go -> step >>= bool end go)
 
 type M a = StateT UserState (InputT IO) a
 
-withInputLine :: String -> (String -> M Bool) -> M Bool
-withInputLine s a = lift (getInputLine s) >>= maybe (return False) a
+withInputLine :: d -> String -> (String -> M d) -> M d
+withInputLine d s a = lift (getInputLine s) >>= maybe (return d) a
 
 outputLine :: String -> M ()
 outputLine s = lift (outputStrLn s)
@@ -59,7 +59,7 @@ data Command
     | HelpCommand
     | DefineCommand   String
     | UndefineCommand String
-    | ShowCommand (Definitions -> Function -> Function) String
+    | ShowCommand ShowForm String
     | CompareCommand String String
     | ClassCommand String
     | CompleteCommand [String]
@@ -67,16 +67,22 @@ data Command
     | CleanCommand
     | ResetCommand
 
+data ShowForm
+    = ShowDefault
+    | ShowCNF
+    | ShowDNF
+    | ShowANF
+    | ShowTable
 
 talk :: M Bool
-talk = withInputLine ">> " $ \commandString -> do
+talk = withInputLine False ">> " $ \commandString -> do
     case parseCommand commandString of
         Nothing -> simply $ outputLine "Couldn't parse the command..."
         Just command -> case command of
             QuitCommand -> return False
             PassCommand -> return True
             HelpCommand -> simply $ outputLine helpMessage
-            DefineCommand    name -> handleDefine    name
+            DefineCommand    name -> simply $ handleDefine    name
             UndefineCommand  name -> simply $ handleUndefine  name
             ShowCommand form name -> simply $ handleShow form name
             CompareCommand name1 name2 -> simply $ handleCompare name1 name2
@@ -93,12 +99,12 @@ parseCommand s = case words s of
     ["help"] -> Just HelpCommand
     ["define",   name] -> Just (DefineCommand   name)
     ["undefine", name] -> Just (UndefineCommand name)
-    ["show",     name] -> Just (ShowCommand (const id) name)
+    ["show",     name] -> Just (ShowCommand ShowDefault name)
     ["show", form, name] -> case form of
-       "cnf"   -> Just (ShowCommand (conjunctive nf) name)
-       "dnf"   -> Just (ShowCommand (disjunctive nf) name)
-       "anf"   -> Just (ShowCommand (algebraic   nf) name)
-       "table" -> Just (ShowCommand tablify name)
+       "cnf"   -> Just (ShowCommand ShowCNF   name)
+       "dnf"   -> Just (ShowCommand ShowDNF   name)
+       "anf"   -> Just (ShowCommand ShowANF   name)
+       "table" -> Just (ShowCommand ShowTable name)
        _ -> Nothing
     ["compare", name1, name2] -> Just (CompareCommand name1 name2)
     ["class",   name]  -> Just (ClassCommand name)
@@ -126,9 +132,9 @@ helpMessage = unlines
     , "reset             -- define standard functions"
     ]
 
-handleDefine :: String -> M Bool
-handleDefine name = withInputLine (name ++ " = ") $ \s ->
-    simply $ case parse s of
+handleDefine :: String -> M ()
+handleDefine name = withInputLine () (name ++ " = ") $ \s ->
+    case parse s of
         Left  msg -> do outputLine "Couldn't parse the expression..."
                         outputLine (show msg)
         Right fun -> do definitions %= M.insert name fun
@@ -139,9 +145,15 @@ handleUndefine name = use definitions >>= \defs -> bool notfound
     (definitions %= M.delete name >> outputLine "Done!")
     (M.member name defs)
 
-handleShow :: (Definitions -> Function -> Function) -> String -> M ()
+handleShow :: ShowForm -> String -> M ()
 handleShow form name = use definitions >>= \defs -> maybe notfound
-    (outputLine . rFunction . form defs) (M.lookup name defs)
+    (outputLine . rFunction . dispatch form defs) (M.lookup name defs)
+    where dispatch = \case
+              ShowDefault -> const id
+              ShowCNF     -> conjunctive nf
+              ShowDNF     -> disjunctive nf
+              ShowANF     -> algebraic nf
+              ShowTable   -> tablify
 
 handleCompare :: String -> String -> M ()
 handleCompare name1 name2
