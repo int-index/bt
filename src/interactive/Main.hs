@@ -133,8 +133,9 @@ helpMessage = unlines
     ]
 
 handleDefine :: String -> M ()
-handleDefine name = withInputLine () (name ++ " = ") $ \s ->
-    case parse s of
+handleDefine name = withInputLine () (name ++ " = ") $ \s -> do
+    ops <- use operators
+    case parse ops s of
         Left  msg -> do outputLine "Couldn't parse the expression..."
                         outputLine (show msg)
         Right fun -> do definitions %= M.insert name fun
@@ -146,8 +147,12 @@ handleUndefine name = use definitions >>= \defs -> bool notfound
     (M.member name defs)
 
 handleShow :: ShowForm -> String -> M ()
-handleShow form name = use definitions >>= \defs -> maybe notfound
-    (outputLine . rFunction . dispatch form defs) (M.lookup name defs)
+handleShow form name = do
+    defs <- use definitions
+    ops  <- use operators
+    maybe notfound
+        (outputLine . rFunction ops . dispatch form defs)
+        (M.lookup name defs)
     where dispatch = \case
               ShowDefault -> const id
               ShowCNF     -> conjunctive nf

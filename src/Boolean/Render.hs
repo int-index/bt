@@ -9,23 +9,22 @@ import Data.Foldable
 import Boolean.Operator
 import Boolean.Expression
 
-import qualified Boolean.Predef    as P
 import qualified Data.Boolean.Tree as T
-
 import qualified Data.Map as M
 
-rFunction :: Function -> String
-rFunction (Function params e)
-    | null params = discarding rExpression e
-    | otherwise   = unwords params ++ " . " ++ discarding rExpression e
-rFunction (Tree t) = "[" ++ map (bool '0' '1') (T.toList t) ++ "]"
+rFunction :: Operators -> Function -> String
+rFunction ops (Function params e)
+    | null params = discarding rExpr e
+    | otherwise   = unwords params ++ " . " ++ discarding rExpr e
+    where rExpr = rExpression ops
+rFunction _ (Tree t) = "[" ++ map (bool '0' '1') (T.toList t) ++ "]"
 
-rExpression :: Expression -> Leveling String
-rExpression (Access name)  = (name, L0)
-rExpression (Call name xs) = maybe (rCall name args) id mresult
-    where args = map rExpression xs
+rExpression :: Operators -> Expression -> Leveling String
+rExpression _   (Access name)  = (name, L0)
+rExpression ops (Call name xs) = maybe (rCall name args) id mresult
+    where args = rExpression ops `map` xs
           mresult  = do
-              op <- M.lookup name P.operators
+              op <- M.lookup name ops
               getFirst $ foldMap (\r -> First (r op args)) handlers
           handlers = [rNullary, rUnary, rBinary]
 
