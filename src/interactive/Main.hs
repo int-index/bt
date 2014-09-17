@@ -6,7 +6,9 @@ import qualified Data.Map as M
 import Control.Applicative
 import Control.Monad.State.Strict
 import Control.Lens (declareLenses, (%=), use)
+import Data.List (sortBy)
 import Data.Bool
+import Data.Monoid
 
 import Boolean.Expression
 import Boolean.Analysis
@@ -66,6 +68,7 @@ data Command
     | ListCommand
     | CleanCommand
     | ResetCommand
+    | OperatorsCommand
 
 data ShowForm
     = ShowDefault
@@ -91,6 +94,7 @@ talk = withInputLine False ">> " $ \commandString -> do
             ListCommand  -> simply $ use definitions >>= outputLine . unlines . M.keys
             CleanCommand -> simply $ put   emptyUserState
             ResetCommand -> simply $ put defaultUserState
+            OperatorsCommand -> simply $ handleOperators
 
 parseCommand :: String -> Maybe Command
 parseCommand s = case words s of
@@ -112,6 +116,7 @@ parseCommand s = case words s of
     ["list"]  -> Just ListCommand
     ["clean"] -> Just CleanCommand
     ["reset"] -> Just ResetCommand
+    ["operators"] -> Just OperatorsCommand
     _ -> Nothing
 
 helpMessage :: String
@@ -176,3 +181,37 @@ handleComplete :: [String] -> M ()
 handleComplete names = use definitions >>= \defs -> maybe notfound
     (outputLine . bool "Incomplete" "Complete" . complete defs)
     (forM names $ \name -> M.lookup name defs)
+
+handleOperators :: M ()
+handleOperators = do
+    ops <- use operators
+    let opNameLength = maximum (map length $ M.keys ops)
+        aliases = \case
+            NullaryOperator as   -> as
+            UnaryOperator   as _ -> as
+            BinaryOperator  as _ -> as
+        fixshow = \case
+            NullaryOperator _ -> "nullfix "
+            UnaryOperator  _ (_, fixity) -> case fixity of
+                Prefix   -> "prefix  "
+                Postfix  -> "postfix "
+            BinaryOperator _ (_, fixity) -> case fixity of
+                Leftfix  -> "leftfix "
+                Rightfix -> "rightfix"
+                Nonfix   -> "nonfix  "
+        align maxLength s = s ++ replicate (maxLength - length s) ' '
+        -- a rather hacky formatting function
+        format (name, op) = unwords $
+            [ align (opNameLength + 1) name
+            , align 9 (fixshow op)
+            ] ++ map (align 3) (aliases op)
+    mapM_ (outputLine . format) (sortOps ops)
+
+sortOps :: Operators -> [(String, Operator)]
+sortOps = sortBy cmp . M.toList where
+    value = \case
+        NullaryOperator _ -> Nothing
+        UnaryOperator   _ (i, _) -> Just i
+        BinaryOperator  _ (i, _) -> Just i
+    cmp (name1, op1) (name2, op2) = compare (value op1) (value op2)
+                                 <> compare name1 name2
