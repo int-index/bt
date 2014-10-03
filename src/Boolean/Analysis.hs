@@ -2,6 +2,7 @@
 {-# LANGUAGE TypeFamilies #-}
 module Boolean.Analysis where
 
+import Control.Monad.Reader
 import Control.Applicative
 import Data.List
 import Data.Bool
@@ -30,10 +31,10 @@ data Algebraic
 class NF a where
     data family RepNF a :: *
     reifyNF :: RepNF a -> Function
-    normalize :: Definitions -> Function -> RepNF a
+    normalize :: Function -> Evaluate (RepNF a)
 
-nf :: forall form . NF form => Proxy form -> Definitions -> Function -> Function
-nf Proxy defs fun = reifyNF (normalize defs fun :: RepNF form)
+nf :: forall form . NF form => Proxy form -> Function -> Evaluate Function
+nf Proxy fun = reifyNF <$> (normalize fun :: Evaluate (RepNF form))
 
 conjunctive f = f (Proxy :: Proxy Conjunctive)
 disjunctive f = f (Proxy :: Proxy Disjunctive)
@@ -47,34 +48,37 @@ listAnd = foldl0 (call_2 "and") (call_0 "true")
 
 instance NF Conjunctive where
     data RepNF Conjunctive = CNF [String] [[Either String String]]
-    normalize defs fun = CNF params expr where
-        params = paramsOf fun
-        args   = argsOf   fun
-        expr = map term $ filter (eval defs fun) args
-        term = zipWith prim params
-        prim p = bool (Right p) (Left p) . not
+    normalize fun = do
+        let params = paramsOf fun
+            args   = argsOf   fun
+            term = zipWith prim params
+            prim p = bool (Right p) (Left p) . not
+        expr <- map term <$> filterM (evaluate fun) args
+        return (CNF params expr)
     reifyNF (CNF params expr) = Function params (nmap3 listOr listAnd pass0 expr) where
         pass0 = either (call_1 "not" . Access) Access
 
 instance NF Disjunctive where
     data RepNF Disjunctive = DNF [String] [[Either String String]]
-    normalize defs fun = DNF params expr where
-        params = paramsOf fun
-        args   = argsOf   fun
-        expr = map term $ filter (not . eval defs fun) args
-        term = zipWith prim params
-        prim p = bool (Right p) (Left p)
+    normalize fun = do
+        let params = paramsOf fun
+            args   = argsOf   fun
+            term = zipWith prim params
+            prim p = bool (Right p) (Left p)
+        expr <- map term <$> filterM (fmap not . evaluate fun) args
+        return (DNF params expr)
     reifyNF (DNF params expr) = Function params (nmap3 listAnd listOr pass0 expr) where
         pass0 = either (call_1 "not" . Access) Access
 
 instance NF Algebraic where
     data RepNF Algebraic = ANF [String] [[String]]
-    normalize defs fun = ANF params expr where
-        params = paramsOf fun
-        args   = argsOf   fun
-        table  = tableOf defs fun
-        expr = keep (map (keep params) args) (map head $ columns table)
-        keep xs ys = map fst . filter snd $ zip xs ys
+    normalize fun = do
+        table <- tableOf fun
+        let params = paramsOf fun
+            args   = argsOf   fun
+            expr = keep (map (keep params) args) (map head $ columns table)
+            keep xs ys = map fst . filter snd $ zip xs ys
+        return (ANF params expr)
     reifyNF (ANF params expr) = Function params (nmap3 listXor listAnd Access expr)
 
 anf_core :: RepNF Algebraic -> [[String]]
@@ -84,24 +88,34 @@ anf_core (ANF _ core) = core
 --- Post's classes and functional completeness
 ---
 
-data PostClass = T0 | T1 | S | M | L deriving (Read, Show, Eq)
+data PostClass = T Bool | S | M | L deriving (Eq)
 
-check :: PostClass -> Definitions -> Function -> Bool
-check T0 defs fun = (eval defs fun) (replicate (arity fun) False) == False
-check T1 defs fun = (eval defs fun) (replicate (arity fun) True)  == True
-check S  defs fun = and (map check1 (argsOf fun))
-    where check1 args = not (eval defs fun args) == eval defs fun (map not args)
-check M  defs fun = check1 (treeOf defs fun)
+instance Show PostClass where
+    show = \case
+        T False -> "T0"
+        T True  -> "T1"
+        S -> "S"
+        M -> "M"
+        L -> "L"
+
+check :: Function -> PostClass -> Evaluate Bool
+check fun (T a) = (==a) <$> evaluate fun (arity fun `replicate` a)
+check fun S  = and <$> mapM check1 (argsOf fun)
+    where check1 args = do
+            normal  <- evaluate fun args
+            negated <- evaluate fun (map not args)
+            return (not normal == negated)
+check fun M  = check1 <$> treeOf fun
     where check1 (T.Node _) = True
           check1 (T.Joint f t) = check1 f && check1 t && on (<=) T.toList f t
-check L  defs fun = check1 (anf_core $ normalize defs fun)
-    where check1 = and . map (liftA2 (||) null single)
-          single [_] = True
-          single  _  = False
+check fun L  = all less1 . anf_core <$> normalize fun
+    where less1 [ ] = True
+          less1 [_] = True
+          less1  _  = False
 
-postClasses :: Definitions -> Function -> [PostClass]
-postClasses defs fun = filter (\c -> check c defs fun) [T0, T1, S, M, L]
+postClasses :: Function -> Evaluate [PostClass]
+postClasses fun = filterM (check fun) [T False, T True, S, M, L]
 
-complete :: Definitions -> [Function] -> Bool
-complete _    [] = False
-complete defs xs = null $ foldr1 intersect $ map (postClasses defs) xs
+complete :: [Function] -> Evaluate Bool
+complete []   = return False
+complete funs = null . foldr1 intersect <$> mapM postClasses funs

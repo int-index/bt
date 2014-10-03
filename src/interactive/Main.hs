@@ -3,7 +3,6 @@ module Main where
 
 import System.Console.Haskeline hiding (complete)
 import qualified Data.Map as M
-import Control.Applicative
 import Control.Monad.State.Strict
 import Control.Lens (declareLenses, (%=), use)
 import Data.List (sortBy)
@@ -50,9 +49,8 @@ outputLine s = lift (outputStrLn s)
 simply :: Monad m => m a -> m Bool
 simply a = a >> return True
 
-hello    = outputLine "The Bool Tool"
-bye      = outputLine "Bye!"
-notfound = outputLine "Not found"
+hello = outputLine "The Bool Tool"
+bye   = outputLine "Bye!"
 
 
 data Command
@@ -147,19 +145,20 @@ handleDefine name = withInputLine () (name ++ " = ") $ \s -> do
                         outputLine "Done!"
 
 handleUndefine :: String -> M ()
-handleUndefine name = use definitions >>= \defs -> bool notfound
-    (definitions %= M.delete name >> outputLine "Done!")
-    (M.member name defs)
+handleUndefine name = do
+    definitions %= M.delete name
+    outputLine "Done!"
 
 handleShow :: ShowForm -> String -> M ()
 handleShow form name = do
-    defs <- use definitions
     ops  <- use operators
-    maybe notfound
-        (outputLine . rFunction ops . dispatch form defs)
-        (M.lookup name defs)
-    where dispatch = \case
-              ShowDefault -> const id
+    defs <- use definitions
+    runEvaluate defs
+        (outputLine . show)
+        (outputLine . rFunction ops)
+        (dispatch form `onFunction` name)
+    where dispatch form = case form of
+              ShowDefault -> return
               ShowCNF     -> conjunctive nf
               ShowDNF     -> disjunctive nf
               ShowANF     -> algebraic nf
@@ -168,19 +167,28 @@ handleShow form name = do
 handleCompare :: String -> String -> M ()
 handleCompare name1 name2
     | name1 == name2 = outputLine "You're kidding, right?"
-    | otherwise = use definitions >>= \defs ->
-        let eq = funeq defs <$> M.lookup name1 defs <*> M.lookup name2 defs
-        in maybe notfound (outputLine . bool "Different" "Equal") eq
+    | otherwise = do
+        defs <- use definitions
+        runEvaluate defs
+            (outputLine . show)
+            (outputLine . bool "Different" "Equal")
+            (liftL2 onFunction funeq name1 name2)
 
 handleClass :: String -> M ()
-handleClass name = use definitions >>= \defs -> maybe notfound
-    (outputLine . unwords . map show . postClasses defs)
-    (M.lookup name defs)
+handleClass name = do
+    defs <- use definitions
+    runEvaluate defs
+        (outputLine . show)
+        (outputLine . unwords . map show)
+        (postClasses `onFunction` name)
 
 handleComplete :: [String] -> M ()
-handleComplete names = use definitions >>= \defs -> maybe notfound
-    (outputLine . bool "Incomplete" "Complete" . complete defs)
-    (forM names $ \name -> M.lookup name defs)
+handleComplete names = do
+    defs <- use definitions
+    runEvaluate defs
+        (outputLine . show)
+        (outputLine . bool "Incomplete" "Complete")
+        (mapM (onFunction return) names >>= complete)
 
 handleOperators :: M ()
 handleOperators = do

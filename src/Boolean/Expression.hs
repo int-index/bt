@@ -2,6 +2,8 @@ module Boolean.Expression where
 
 import Control.Applicative
 import Control.Monad
+import Control.Monad.Except
+import Control.Monad.Reader
 import Data.List
 import Data.Function
 import qualified Data.Map as M
@@ -16,9 +18,6 @@ data Function
     = Function [String] Expression
     | Tree     (T.Tree Bool)
 
-funeq :: Definitions -> Function -> Function -> Bool
-funeq defs = (==) `on` (tableOf defs)
-
 call_0 :: String -> Expression
 call_0 s     = Call s []
 
@@ -30,36 +29,57 @@ call_2 s x y = Call s [x, y]
 
 type Definitions = M.Map String Function
 
-eval :: Definitions -> Function -> [Bool] -> Bool
-eval defs (Function params e) args = value e where
-    value :: Expression -> Bool
+data Error = BadAccess String
+           | BadCall   String
+           | BadTree
+    deriving (Eq, Show)
+
+type Evaluate a = ReaderT Definitions (Except Error) a
+
+runEvaluate :: Definitions -> (Error -> x) -> (a -> x) -> Evaluate a -> x
+runEvaluate defs handle ret m = either handle ret (runExcept (runReaderT m defs))
+
+evaluate :: Function -> [Bool] -> Evaluate Bool
+evaluate (Function params e) args = value e where
     value (Access name)
-        = maybe (error $ "eval: Bad access " ++ name) id
+        = maybe (throwError $ BadAccess name) return
         $ lookup name (zip params args)
-    value (Call name xs) = case M.lookup name defs of
-        Nothing  -> error $ "eval: Bad call " ++ name
-        Just fun -> eval defs fun (map value xs)
-eval _ (Tree t)  args = maybe (error "eval: Bad tree") id (T.visit t args)
+    value (Call name xs) = withFunction name
+        $ \fun -> evaluate fun =<< mapM value xs
+evaluate (Tree t)  args = maybe (throwError BadTree) return (T.visit t args)
+
+onFunction :: (Function -> Evaluate a) -> (String -> Evaluate a)
+onFunction f name = maybe (throwError $ BadCall name) f =<< asks (M.lookup name)
+
+withFunction = flip onFunction
+
+liftL2 :: ((a      -> c) -> (b      -> c))
+       -> ((a -> a -> c) -> (b -> b -> c))
+liftL2 k f a1 a2 =
+    flip k a1 $ \b1 ->
+    flip k a2 $ \b2 ->
+      f b1 b2
+
+funeq :: Function -> Function -> Evaluate Bool
+funeq = liftA2 (==) `on` tableOf
 
 function :: Expression -> Function
 function e = Function (names e) e
 
 names :: Expression -> [String]
 names e = (sort . nub) (names' e)
+  where names' (Access name) = [name]
+        names' (Call _ xs) = concatMap names' xs
 
-names' :: Expression -> [String]
-names' (Access name) = [name]
-names' (Call _ xs) = concatMap names' xs
+tablify :: Function -> Evaluate Function
+tablify fun = Tree <$> treeOf fun
 
-tablify :: Definitions -> Function -> Function
-tablify defs fun = (Tree . T.unsafeFromList) (tableOf defs fun)
+tableOf :: Function -> Evaluate [Bool]
+tableOf fun = mapM (evaluate fun) (argsOf fun)
 
-tableOf :: Definitions -> Function -> [Bool]
-tableOf defs fun = map (eval defs fun) (argsOf fun)
-
-treeOf :: Definitions -> Function -> (T.Tree Bool)
-treeOf _ (Tree t) = t
-treeOf defs fun   = T.unsafeFromList (tableOf defs fun)
+treeOf :: Function -> Evaluate (T.Tree Bool)
+treeOf (Tree t) = return t
+treeOf fun = T.unsafeFromList <$> tableOf fun
 
 nameStream :: [String]
 nameStream = [1..] >>= flip replicateM alphabet
