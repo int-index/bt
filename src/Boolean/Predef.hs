@@ -2,8 +2,7 @@ module Boolean.Predef where
 
 import Boolean.Expression
 import Boolean.Operator
-
-import qualified Data.Boolean.Tree as T
+import Boolean.Reflection
 
 import qualified Data.Map as M
 
@@ -24,15 +23,17 @@ operators = M.fromList
 
 functions :: Definitions
 functions = M.fromList
-    [ ("true" , tree [True])
-    , ("false", tree [False])
-    , ("id"  , tree [False, True])
-    , ("not" , tree [True, False])
-    , ("and" , tree [False, False, False, True ])
-    , ("or"  , tree [False, True , True , True ])
-    , ("xor" , tree [False, True , True , False])
-    , ("nand", tree [True , True , True , False])
-    , ("nor" , tree [True , False, False, False])
-    , ("ent" , tree [True , True , False, True ])
-    , ("equ" , tree [True , False, False, True ])
-    ] where tree = Tree . T.unsafeFromList
+    [ ("true" , reflect0 True )
+    , ("false", reflect0 False)
+    , ("id"  , reflect1 id  )
+    , ("not" , reflect1 not )
+    , ("and" , reflect2 (&&))
+    , ("or"  , reflect2 (||))
+    , ("xor" , reflect2 (/=))
+    , ("nand", reflect2 nand)
+    , ("nor" , reflect2 nor )
+    , ("ent" , reflect2 ent )
+    , ("equ" , reflect2 (==))
+    ] where nand x y = not (x && y)
+            nor  x y = not (x || y)
+            ent  x y = not  x || y

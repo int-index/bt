@@ -12,6 +12,7 @@ import Data.Proxy
 import qualified Data.Map as M
 
 import Boolean.Expression
+import Boolean.Reflection
 import qualified Data.Boolean.Tree as T
 
 foldl0 f b = \case
@@ -50,50 +51,47 @@ behavesLike model
           []    -> throwError BadModel
           def:_ -> return (fst def)
 
-model_true  = Tree $ T.unsafeFromList [True]
-model_false = Tree $ T.unsafeFromList [False]
-model_not   = Tree $ T.unsafeFromList [True , False]
-model_and   = Tree $ T.unsafeFromList [False, False, False, True ]
-model_or    = Tree $ T.unsafeFromList [False, True , True , True ]
-model_xor   = Tree $ T.unsafeFromList [False, True , True , False]
+summon0 f = call_0 <$> behavesLike (reflect0 f)
+summon1 f = call_1 <$> behavesLike (reflect1 f)
+summon2 f = call_2 <$> behavesLike (reflect2 f)
 
-foldl0_call f a = foldl0 (call_2 f) (call_0 a)
-
-listOr  = foldl0_call <$> behavesLike model_or  <*> behavesLike model_false
-listXor = foldl0_call <$> behavesLike model_xor <*> behavesLike model_false
-listAnd = foldl0_call <$> behavesLike model_and <*> behavesLike model_true
+listOr  = foldl0 <$> summon2 (||) <*> summon0 False
+listXor = foldl0 <$> summon2 (/=) <*> summon0 False
+listAnd = foldl0 <$> summon2 (&&) <*> summon0 True
 
 instance NF Conjunctive where
-    data RepNF Conjunctive = CNF [String] [[Either String String]]
+    data RepNF Conjunctive = CNF [String] [[(Bool, String)]]
     normalize fun = do
         let params = paramsOf fun
             args   = argsOf   fun
             term = zipWith prim params
-            prim p = bool (Right p) (Left p) . not
+            prim = flip (,)
         expr <- map term <$> filterM (evaluate fun) args
         return (CNF params expr)
     reifyNF (CNF params expr) = do
-        call_not     <- call_1 <$> behavesLike model_not
-        call_listOr  <- listOr
-        call_listAnd <- listAnd
-        let pass0 = either (call_not . Access) Access
-        return $ Function params (nmap3 call_listOr call_listAnd pass0 expr)
+        pass2 <- listOr
+        pass1 <- listAnd
+        pass0 <- do
+            call_not <- summon1 not
+            return $ uncurry (bool call_not id) . fmap Access
+        return $ Function params (nmap3 pass2 pass1 pass0 expr)
 
 instance NF Disjunctive where
-    data RepNF Disjunctive = DNF [String] [[Either String String]]
+    data RepNF Disjunctive = DNF [String] [[(Bool, String)]]
     normalize fun = do
         let params = paramsOf fun
             args   = argsOf   fun
             term = zipWith prim params
-            prim p = bool (Right p) (Left p)
+            prim = flip (,)
         expr <- map term <$> filterM (fmap not . evaluate fun) args
         return (DNF params expr)
     reifyNF (DNF params expr) = do
-        call_not     <- call_1 <$> behavesLike model_not
-        call_listAnd <- listAnd
-        call_listOr  <- listOr
-        let pass0 = either (call_not . Access) Access
-        return $ Function params (nmap3 call_listAnd call_listOr pass0 expr)
+        pass2 <- listAnd
+        pass1 <- listOr
+        pass0 <- do
+            call_not <- summon1 not
+            return $ uncurry (bool id call_not) . fmap Access
+        return $ Function params (nmap3 pass2 pass1 pass0 expr)
 
 instance NF Algebraic where
     data RepNF Algebraic = ANF [String] [[String]]
@@ -105,9 +103,10 @@ instance NF Algebraic where
             keep xs ys = map fst . filter snd $ zip xs ys
         return (ANF params expr)
     reifyNF (ANF params expr) = do
-        call_listXor <- listXor
-        call_listAnd <- listAnd
-        return $ Function params (nmap3 call_listXor call_listAnd Access expr)
+        pass2 <- listXor
+        pass1 <- listAnd
+        pass0 <- return Access
+        return $ Function params (nmap3 pass2 pass1 pass0 expr)
 
 anf_core :: RepNF Algebraic -> [[String]]
 anf_core (ANF _ core) = core

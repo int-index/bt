@@ -8,6 +8,7 @@ cabal-version:       >=1.18
 library
   exposed-modules:     Boolean.Expression
                        Boolean.Analysis
+                       Boolean.Reflection
                        Boolean.Operator
                        Boolean.Parser
                        Boolean.Render
