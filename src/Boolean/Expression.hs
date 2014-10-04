@@ -31,6 +31,7 @@ type Definitions = M.Map String Function
 
 data Error = BadAccess String
            | BadCall   String
+           | BadModel
            | BadTree
     deriving (Eq, Show)
 

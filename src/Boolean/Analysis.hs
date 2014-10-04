@@ -3,11 +3,13 @@
 module Boolean.Analysis where
 
 import Control.Monad.Reader
+import Control.Monad.Except
 import Control.Applicative
 import Data.List
 import Data.Bool
 import Data.Function
 import Data.Proxy
+import qualified Data.Map as M
 
 import Boolean.Expression
 import qualified Data.Boolean.Tree as T
@@ -30,21 +32,36 @@ data Algebraic
 
 class NF a where
     data family RepNF a :: *
-    reifyNF :: RepNF a -> Function
+    reifyNF :: RepNF a -> Evaluate Function
     normalize :: Function -> Evaluate (RepNF a)
 
 nf :: forall form . NF form => Proxy form -> Function -> Evaluate Function
-nf Proxy fun = reifyNF <$> (normalize fun :: Evaluate (RepNF form))
+nf Proxy fun = (normalize fun :: Evaluate (RepNF form)) >>= reifyNF
 
 conjunctive f = f (Proxy :: Proxy Conjunctive)
 disjunctive f = f (Proxy :: Proxy Disjunctive)
 algebraic   f = f (Proxy :: Proxy Algebraic)
 
+behavesLike :: Function -> Evaluate String
+behavesLike model
+      = asks M.toList
+    >>= filterM (funeq model . snd)
+    >>= \case
+          []    -> throwError BadModel
+          def:_ -> return (fst def)
 
-listOr  = foldl0 (call_2 "or")  (call_0 "false")
-listXor = foldl0 (call_2 "xor") (call_0 "false")
-listAnd = foldl0 (call_2 "and") (call_0 "true")
+model_true  = Tree $ T.unsafeFromList [True]
+model_false = Tree $ T.unsafeFromList [False]
+model_not   = Tree $ T.unsafeFromList [True , False]
+model_and   = Tree $ T.unsafeFromList [False, False, False, True ]
+model_or    = Tree $ T.unsafeFromList [False, True , True , True ]
+model_xor   = Tree $ T.unsafeFromList [False, True , True , False]
 
+foldl0_call f a = foldl0 (call_2 f) (call_0 a)
+
+listOr  = foldl0_call <$> behavesLike model_or  <*> behavesLike model_false
+listXor = foldl0_call <$> behavesLike model_xor <*> behavesLike model_false
+listAnd = foldl0_call <$> behavesLike model_and <*> behavesLike model_true
 
 instance NF Conjunctive where
     data RepNF Conjunctive = CNF [String] [[Either String String]]
@@ -55,8 +72,12 @@ instance NF Conjunctive where
             prim p = bool (Right p) (Left p) . not
         expr <- map term <$> filterM (evaluate fun) args
         return (CNF params expr)
-    reifyNF (CNF params expr) = Function params (nmap3 listOr listAnd pass0 expr) where
-        pass0 = either (call_1 "not" . Access) Access
+    reifyNF (CNF params expr) = do
+        call_not     <- call_1 <$> behavesLike model_not
+        call_listOr  <- listOr
+        call_listAnd <- listAnd
+        let pass0 = either (call_not . Access) Access
+        return $ Function params (nmap3 call_listOr call_listAnd pass0 expr)
 
 instance NF Disjunctive where
     data RepNF Disjunctive = DNF [String] [[Either String String]]
@@ -67,8 +88,12 @@ instance NF Disjunctive where
             prim p = bool (Right p) (Left p)
         expr <- map term <$> filterM (fmap not . evaluate fun) args
         return (DNF params expr)
-    reifyNF (DNF params expr) = Function params (nmap3 listAnd listOr pass0 expr) where
-        pass0 = either (call_1 "not" . Access) Access
+    reifyNF (DNF params expr) = do
+        call_not     <- call_1 <$> behavesLike model_not
+        call_listAnd <- listAnd
+        call_listOr  <- listOr
+        let pass0 = either (call_not . Access) Access
+        return $ Function params (nmap3 call_listAnd call_listOr pass0 expr)
 
 instance NF Algebraic where
     data RepNF Algebraic = ANF [String] [[String]]
@@ -79,7 +104,10 @@ instance NF Algebraic where
             expr = keep (map (keep params) args) (map head $ columns table)
             keep xs ys = map fst . filter snd $ zip xs ys
         return (ANF params expr)
-    reifyNF (ANF params expr) = Function params (nmap3 listXor listAnd Access expr)
+    reifyNF (ANF params expr) = do
+        call_listXor <- listXor
+        call_listAnd <- listAnd
+        return $ Function params (nmap3 call_listXor call_listAnd Access expr)
 
 anf_core :: RepNF Algebraic -> [[String]]
 anf_core (ANF _ core) = core
