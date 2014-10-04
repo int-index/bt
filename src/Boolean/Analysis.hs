@@ -66,14 +66,14 @@ instance NF Conjunctive where
             args   = argsOf   fun
             term = zipWith prim params
             prim = flip (,)
-        expr <- map term <$> filterM (evaluate fun) args
+        expr <- map term <$> filterM (fmap not . evaluate fun) args
         return (CNF params expr)
     reifyNF (CNF params expr) = do
-        pass2 <- listOr
-        pass1 <- listAnd
+        pass2 <- listAnd
+        pass1 <- listOr
         pass0 <- do
             call_not <- summon1 not
-            return $ uncurry (bool call_not id) . fmap Access
+            return $ uncurry (bool id call_not) . fmap Access
         return $ Function params (nmap3 pass2 pass1 pass0 expr)
 
 instance NF Disjunctive where
@@ -83,14 +83,14 @@ instance NF Disjunctive where
             args   = argsOf   fun
             term = zipWith prim params
             prim = flip (,)
-        expr <- map term <$> filterM (fmap not . evaluate fun) args
+        expr <- map term <$> filterM (evaluate fun) args
         return (DNF params expr)
     reifyNF (DNF params expr) = do
-        pass2 <- listAnd
-        pass1 <- listOr
+        pass2 <- listOr
+        pass1 <- listAnd
         pass0 <- do
             call_not <- summon1 not
-            return $ uncurry (bool id call_not) . fmap Access
+            return $ uncurry (bool call_not id) . fmap Access
         return $ Function params (nmap3 pass2 pass1 pass0 expr)
 
 instance NF Algebraic where
