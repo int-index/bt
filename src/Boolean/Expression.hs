@@ -68,7 +68,7 @@ function :: Expression -> Function
 function e = Function (names e) e
 
 names :: Expression -> [String]
-names e = (sort . nub) (names' e)
+names = sort . nub . names'
   where names' (Access name) = [name]
         names' (Call _ xs) = concatMap names' xs
 
