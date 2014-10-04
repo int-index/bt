@@ -149,14 +149,18 @@ handleUndefine name = do
     definitions %= M.delete name
     outputLine "Done!"
 
+infixl 0 `runEval`
+
+runEval :: Evaluate a -> (a -> M ()) -> M ()
+runEval x action = do
+    defs <- use definitions
+    runEvaluate defs (outputLine . show) action x
+
 handleShow :: ShowForm -> String -> M ()
 handleShow form name = do
     ops  <- use operators
-    defs <- use definitions
-    runEvaluate defs
-        (outputLine . show)
-        (outputLine . rFunction ops)
-        (dispatch form `onFunction` name)
+    dispatch form `onFunction` name
+        `runEval` \fun -> outputLine (rFunction ops fun)
     where dispatch form = case form of
               ShowDefault -> return
               ShowCNF     -> conjunctive nf
@@ -168,27 +172,18 @@ handleCompare :: String -> String -> M ()
 handleCompare name1 name2
     | name1 == name2 = outputLine "You're kidding, right?"
     | otherwise = do
-        defs <- use definitions
-        runEvaluate defs
-            (outputLine . show)
-            (outputLine . bool "Different" "Equal")
-            (liftL2 onFunction funeq name1 name2)
+        liftL2 onFunction funeq name1 name2
+            `runEval` \p -> outputLine (if p then "Equal" else "Different")
 
 handleClass :: String -> M ()
 handleClass name = do
-    defs <- use definitions
-    runEvaluate defs
-        (outputLine . show)
-        (outputLine . unwords . map show)
-        (postClasses `onFunction` name)
+    postClasses `onFunction` name
+        `runEval` \x -> outputLine (unwords $ map show x)
 
 handleComplete :: [String] -> M ()
 handleComplete names = do
-    defs <- use definitions
-    runEvaluate defs
-        (outputLine . show)
-        (outputLine . bool "Incomplete" "Complete")
-        (mapM (onFunction return) names >>= complete)
+    mapM (onFunction return) names >>= complete
+        `runEval` \p -> outputLine (if p then "Complete" else "Incomplete")
 
 handleOperators :: M ()
 handleOperators = do
