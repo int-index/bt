@@ -3,6 +3,7 @@ module Main where
 
 import System.Console.Haskeline hiding (complete)
 import qualified Data.Map as M
+import qualified Data.Set as S
 import Control.Monad.State.Strict
 import Control.Lens (declareLenses, (%=), use)
 import Data.List (sortBy)
@@ -178,7 +179,7 @@ handleCompare name1 name2
 handleClass :: String -> M ()
 handleClass name = do
     postClasses `onFunction` name
-        `runEval` \x -> outputLine (unwords $ map show x)
+        `runEval` \x -> outputLine (unwords . map show $ S.toList x)
 
 handleComplete :: [String] -> M ()
 handleComplete names = do

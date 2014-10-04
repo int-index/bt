@@ -5,11 +5,11 @@ module Boolean.Analysis where
 import Control.Monad.Reader
 import Control.Monad.Except
 import Control.Applicative
-import Data.List
 import Data.Bool
 import Data.Function
 import Data.Proxy
 import qualified Data.Map as M
+import qualified Data.Set as S
 
 import Boolean.Expression
 import Boolean.Reflection
@@ -115,7 +115,7 @@ anf_core (ANF _ core) = core
 --- Post's classes and functional completeness
 ---
 
-data PostClass = T Bool | S | M | L deriving (Eq)
+data PostClass = T Bool | S | M | L deriving (Eq, Ord)
 
 instance Show PostClass where
     show = \case
@@ -140,9 +140,9 @@ check fun L  = all less1 . anf_core <$> normalize fun
           less1 [_] = True
           less1  _  = False
 
-postClasses :: Function -> Evaluate [PostClass]
-postClasses fun = filterM (check fun) [T False, T True, S, M, L]
+postClasses :: Function -> Evaluate (S.Set PostClass)
+postClasses fun = S.fromList <$> filterM (check fun) [T False, T True, S, M, L]
 
 complete :: [Function] -> Evaluate Bool
 complete []   = return False
-complete funs = null . foldr1 intersect <$> mapM postClasses funs
+complete funs = S.null . foldr1 S.intersection <$> mapM postClasses funs
