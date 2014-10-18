@@ -13,10 +13,12 @@ import Data.Monoid
 import Boolean.Expression
 import Boolean.Analysis
 import Boolean.Operator
-import Boolean.Parser (parse)
 import Boolean.Render (rFunction)
 
 import qualified Boolean.Predef as Predef
+
+import Command
+import Parser
 
 declareLenses [d|
 
@@ -53,38 +55,16 @@ simply a = a >> return True
 hello = outputLine "The Bool Tool"
 bye   = outputLine "Bye!"
 
-
-data Command
-    = PassCommand
-    | QuitCommand
-    | HelpCommand
-    | DefineCommand   String
-    | UndefineCommand String
-    | ShowCommand ShowForm String
-    | CompareCommand String String
-    | ClassCommand String
-    | CompleteCommand [String]
-    | ListCommand
-    | CleanCommand
-    | ResetCommand
-    | OperatorsCommand
-
-data ShowForm
-    = ShowDefault
-    | ShowCNF
-    | ShowDNF
-    | ShowANF
-    | ShowTable
-
 talk :: M Bool
 talk = withInputLine False ">> " $ \commandString -> do
-    case parseCommand commandString of
+    ops <- use operators
+    case parseCommand ops commandString of
         Nothing -> simply $ outputLine "Couldn't parse the command..."
         Just command -> case command of
             QuitCommand -> return False
             PassCommand -> return True
             HelpCommand -> simply $ outputLine helpMessage
-            DefineCommand    name -> simply $ handleDefine    name
+            DefineCommand name fun -> simply $ handleDefine name fun
             UndefineCommand  name -> simply $ handleUndefine  name
             ShowCommand form name -> simply $ handleShow form name
             CompareCommand name1 name2 -> simply $ handleCompare name1 name2
@@ -95,60 +75,31 @@ talk = withInputLine False ">> " $ \commandString -> do
             ResetCommand -> simply $ put defaultUserState
             OperatorsCommand -> simply $ handleOperators
 
-parseCommand :: String -> Maybe Command
-parseCommand s = case words s of
-    [] -> Just PassCommand
-    ["quit"] -> Just QuitCommand
-    ["help"] -> Just HelpCommand
-    ["define",   name] -> Just (DefineCommand   name)
-    ["undefine", name] -> Just (UndefineCommand name)
-    ["show",     name] -> Just (ShowCommand ShowDefault name)
-    ["show", form, name] -> case form of
-       "cnf"   -> Just (ShowCommand ShowCNF   name)
-       "dnf"   -> Just (ShowCommand ShowDNF   name)
-       "anf"   -> Just (ShowCommand ShowANF   name)
-       "table" -> Just (ShowCommand ShowTable name)
-       _ -> Nothing
-    ["compare", name1, name2] -> Just (CompareCommand name1 name2)
-    ["class",   name]  -> Just (ClassCommand name)
-    ("complete":names) -> Just (CompleteCommand names)
-    ["list"]  -> Just ListCommand
-    ["clean"] -> Just CleanCommand
-    ["reset"] -> Just ResetCommand
-    ["operators"] -> Just OperatorsCommand
-    _ -> Nothing
-
 helpMessage :: String
 helpMessage = unlines
     [ "Type one of the following commands:"
     , "help              -- display this message"
     , "quit              -- quit the program"
-    , "define    NAME    -- define a function"
-    , "undefine  NAME    -- undefine a function"
+    , "NAME = EXPR       -- define a function"
+    , "NAME =            -- undefine a function"
     , "show      NAME    -- show a function"
     , "show FORM NAME    -- show a function in a specific form"
     , "     forms: cnf, dnf, anf, table"
-    , "compare NAME NAME -- compare two functions"
+    , "NAME_1 == NAME_2  -- compare two functions"
     , "class     NAME    -- show classes of a function"
     , "complete [NAME]   -- check whether a function system is complete"
-    , "list              -- list defined functions"
+    , "..                -- list defined functions"
     , "clean             -- undefine everything"
     , "reset             -- define standard functions"
     ]
 
-handleDefine :: String -> M ()
-handleDefine name = withInputLine () (name ++ " = ") $ \s -> do
-    ops <- use operators
-    case parse ops s of
-        Left  msg -> do outputLine "Couldn't parse the expression..."
-                        outputLine (show msg)
-        Right fun -> do definitions %= M.insert name fun
-                        outputLine "Done!"
+handleDefine :: String -> Function -> M ()
+handleDefine name fun = do
+    definitions %= M.insert name fun
 
 handleUndefine :: String -> M ()
 handleUndefine name = do
     definitions %= M.delete name
-    outputLine "Done!"
 
 infixl 0 `runEval`
 

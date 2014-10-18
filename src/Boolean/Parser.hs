@@ -15,9 +15,6 @@ import qualified Boolean.Expression as E
 import qualified Boolean.Operator   as O
 import qualified Data.Boolean.Tree  as T
 
-parse :: O.Operators -> String -> Either Parsec.ParseError E.Function
-parse ops = Parsec.parse (whiteSpace *> pFunction ops <* eof) ""
-
 pFunction :: O.Operators -> Parsec.Parsec String () E.Function
 pFunction ops = pTable <|> E.function <$> pExpression ops
 
@@ -76,4 +73,4 @@ op :: String -> Parsec.Parsec String () String
 op = try . token . Parsec.string
 
 groupByFst :: Ord k => [(k, a)] -> [[a]]
-groupByFst = map snd . M.toList . M.fromListWith (++) . map (\(k,a) -> (k,[a]))
+groupByFst = M.elems . M.fromListWith (++) . map (\(k,a) -> (k,[a]))

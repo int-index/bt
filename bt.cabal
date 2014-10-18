@@ -23,7 +23,9 @@ library
 
 executable bt-interactive
   main-is:             Main.hs
-  build-depends:       bt, base, mtl, containers, lens, haskeline
+  other-modules:       Command
+                       Parser
+  build-depends:       bt, base, mtl, containers, parsec, parsers, lens, haskeline
   hs-source-dirs:      src/interactive
   default-language:    Haskell2010
   ghc-options:         -W -O2 -threaded "-with-rtsopts=-N"
