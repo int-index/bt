@@ -11,6 +11,7 @@ import Data.Bool
 import Data.Monoid
 
 import Boolean.Expression
+import Boolean.Reflection (reflect0)
 import Boolean.Analysis
 import Boolean.Operator
 import Boolean.Render (rFunction)
@@ -74,23 +75,25 @@ talk = withInputLine False ">> " $ \commandString -> do
             CleanCommand -> simply $ put   emptyUserState
             ResetCommand -> simply $ put defaultUserState
             OperatorsCommand -> simply $ handleOperators
+            EvalCommand fun  -> simply $ handleEval fun
 
 helpMessage :: String
 helpMessage = unlines
     [ "Type one of the following commands:"
-    , "help              -- display this message"
-    , "quit              -- quit the program"
-    , "NAME = EXPR       -- define a function"
-    , "NAME =            -- undefine a function"
-    , "show      NAME    -- show a function"
-    , "show FORM NAME    -- show a function in a specific form"
-    , "     forms: cnf, dnf, anf, table"
-    , "NAME_1 == NAME_2  -- compare two functions"
-    , "class     NAME    -- show classes of a function"
-    , "complete [NAME]   -- check whether a function system is complete"
-    , "..                -- list defined functions"
-    , "clean             -- undefine everything"
-    , "reset             -- define standard functions"
+    , ":help              -- display this message"
+    , ":quit              -- quit the program"
+    , "EXPR               -- evaluate an expression"
+    , "NAME = EXPR        -- define a function"
+    , "NAME =             -- undefine a function"
+    , ":show      NAME    -- show a function"
+    , ":show FORM NAME    -- show a function in a specific form"
+    , "      forms: cnf, dnf, anf, table"
+    , "NAME_1 == NAME_2   -- compare two functions"
+    , ":class     NAME    -- show classes of a function"
+    , ":complete [NAME]   -- check whether a function system is complete"
+    , "..                 -- list defined functions"
+    , ":clean             -- undefine everything"
+    , ":reset             -- define standard functions"
     ]
 
 handleDefine :: String -> Function -> M ()
@@ -110,7 +113,7 @@ runEval x action = do
 
 handleShow :: ShowForm -> String -> M ()
 handleShow form name = do
-    ops  <- use operators
+    ops <- use operators
     dispatch form `onFunction` name
         `runEval` \fun -> outputLine (rFunction ops fun)
     where dispatch form = case form of
@@ -136,6 +139,11 @@ handleComplete :: [String] -> M ()
 handleComplete names = do
     mapM (onFunction return) names >>= complete
         `runEval` \p -> outputLine (if p then "Complete" else "Incomplete")
+
+handleEval :: Function -> M ()
+handleEval fun = do
+    ops <- use operators
+    evaluate fun [] `runEval` \r -> outputLine (rFunction ops (reflect0 r))
 
 handleOperators :: M ()
 handleOperators = do
