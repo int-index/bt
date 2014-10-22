@@ -16,28 +16,22 @@ import Command
 parse p = either (const Nothing) Just . Parsec.parse (whiteSpace *> p <* eof) ""
 
 pCommand :: O.Operators -> Parsec.Parsec String () Command
-pCommand ops = pCmd1 <|> pList <|> pTextCmd <|> pPass where
+pCommand ops = pDefine <|> pTextCmd <|> pPass where
 
     pName  = ident emptyIdents
 
-    pDefine'  name  = DefineCommand name <$> pFunction ops
-    pCompare' name1 = do
-        name2 <- pName
-        return (CompareCommand name1 name2)
-
-    pCmd1 = do
+    pDefine = do
         name <- pName
-        Parsec.char '='
-        try (Parsec.char '=') *> whiteSpace *> pCompare' name
-            <|> whiteSpace *> (pDefine' name <|> return (UndefineCommand name))
-
-    pList = symbol ".." >> return ListCommand
+        symbolic '='
+        DefineCommand name <$> pFunction ops
+            <|> return (UndefineCommand name)
 
     pTextCmd = do
         symbolic ':'
         some pName >>= \case
             ["quit"] -> return QuitCommand
             ["help"] -> return HelpCommand
+            ["list"] -> return ListCommand
             ["show", name] -> return (ShowCommand ShowDefault name)
             ["show", form, name] -> case form of
                "cnf"   -> return (ShowCommand ShowCNF   name)

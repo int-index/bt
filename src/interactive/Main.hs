@@ -67,7 +67,6 @@ talk = withInputLine False ">> " $ \commandString -> do
             DefineCommand name fun -> simply $ handleDefine name fun
             UndefineCommand  name -> simply $ handleUndefine  name
             ShowCommand form name -> simply $ handleShow form name
-            CompareCommand name1 name2 -> simply $ handleCompare name1 name2
             ClassCommand name -> simply $ handleClass name
             CompleteCommand names -> simply $ handleComplete names
             ListCommand  -> simply $ use definitions >>= outputLine . unlines . M.keys
@@ -87,7 +86,6 @@ helpMessage = unlines
     , ":show      NAME    -- show a function"
     , ":show FORM NAME    -- show a function in a specific form"
     , "      forms: cnf, dnf, anf, table"
-    , "NAME_1 == NAME_2   -- compare two functions"
     , ":class     NAME    -- show classes of a function"
     , ":complete [NAME]   -- check whether a function system is complete"
     , "..                 -- list defined functions"
@@ -121,13 +119,6 @@ handleShow form name = do
               ShowDNF     -> disjunctive nf
               ShowANF     -> algebraic nf
               ShowTable   -> tablify
-
-handleCompare :: String -> String -> M ()
-handleCompare name1 name2
-    | name1 == name2 = outputLine "You're kidding, right?"
-    | otherwise = do
-        liftL2 onFunction funeq name1 name2
-            `runEval` \p -> outputLine (if p then "Equal" else "Different")
 
 handleClass :: String -> M ()
 handleClass name = do

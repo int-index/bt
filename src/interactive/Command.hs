@@ -10,7 +10,6 @@ data Command
     | UndefineCommand String
     | EvalCommand Function
     | ShowCommand ShowForm String
-    | CompareCommand String String
     | ClassCommand String
     | CompleteCommand [String]
     | ListCommand
