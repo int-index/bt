@@ -146,3 +146,11 @@ postClasses fun = S.fromList <$> filterM (check fun) [T False, T True, S, M, L]
 complete :: [Function] -> Evaluate Bool
 complete []   = return False
 complete funs = S.null . foldr1 S.intersection <$> mapM postClasses funs
+
+
+---
+--- Forall-testing
+---
+
+test :: Function -> Evaluate Bool
+test fun = and <$> tableOf fun

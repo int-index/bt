@@ -11,7 +11,6 @@ import Data.Bool
 import Data.Monoid
 
 import Boolean.Expression
-import Boolean.Reflection (reflect0)
 import Boolean.Analysis
 import Boolean.Operator
 import Boolean.Render (rFunction)
@@ -141,9 +140,8 @@ handleComplete names = do
         `runEval` \p -> outputLine (if p then "Complete" else "Incomplete")
 
 handleEval :: Function -> M ()
-handleEval fun = do
-    ops <- use operators
-    evaluate fun [] `runEval` \r -> outputLine (rFunction ops (reflect0 r))
+handleEval fun = test fun
+        `runEval` \p -> outputLine (if p then "True" else "False")
 
 handleOperators :: M ()
 handleOperators = do
