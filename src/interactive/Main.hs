@@ -60,20 +60,20 @@ talk = withInputLine False ">> " $ \commandString -> do
     ops <- use operators
     case parseCommand ops commandString of
         Nothing -> simply $ outputLine "Couldn't parse the command..."
-        Just command -> case command of
-            QuitCommand -> return False
-            PassCommand -> return True
-            HelpCommand -> simply $ outputLine helpMessage
-            DefineCommand name fun -> simply $ handleDefine name fun
-            UndefineCommand  name -> simply $ handleUndefine  name
-            ShowCommand form name -> simply $ handleShow form name
-            ClassCommand name -> simply $ handleClass name
-            CompleteCommand names -> simply $ handleComplete names
-            ListCommand  -> simply $ use definitions >>= outputLine . unlines . M.keys
-            CleanCommand -> simply $ put   emptyUserState
-            ResetCommand -> simply $ put defaultUserState
-            OperatorsCommand -> simply $ handleOperators
-            EvalCommand fun  -> simply $ handleEval fun
+        Just QuitCommand -> return False
+        Just command -> simply $ case command of
+            PassCommand -> return ()
+            HelpCommand -> outputLine helpMessage
+            DefineCommand name fun -> handleDefine name fun
+            UndefineCommand  name -> handleUndefine  name
+            ShowCommand form name -> handleShow form name
+            ClassCommand name -> handleClass name
+            CompleteCommand names -> handleComplete names
+            ListCommand  -> use definitions >>= outputLine . unlines . M.keys
+            CleanCommand -> put   emptyUserState
+            ResetCommand -> put defaultUserState
+            OperatorsCommand -> handleOperators
+            EvalCommand fun  -> handleEval fun
 
 helpMessage :: String
 helpMessage = unlines
@@ -88,7 +88,7 @@ helpMessage = unlines
     , "      forms: cnf, dnf, anf, table"
     , ":class     NAME    -- show classes of a function"
     , ":complete [NAME]   -- check whether a function system is complete"
-    , "..                 -- list defined functions"
+    , ":list              -- list defined functions"
     , ":clean             -- undefine everything"
     , ":reset             -- define standard functions"
     ]
