@@ -18,21 +18,21 @@ import qualified Data.Boolean.Tree  as T
 pFunction :: O.Operators -> Parsec.Parsec String () E.Function
 pFunction ops = pTable <|> E.function <$> pExpression ops
 
-pTable = do bs <- brackets (Parsec.many bin)
-            case T.fromList bs of
-                Nothing -> Parsec.parserFail "broken table"
-                Just t  -> return (E.Tree t)
-       where one  = Parsec.char '1'
-             zero = Parsec.char '0'
-             bin  = True <$ one <|> False <$ zero
+pTable = do
+    bs <- brackets (Parsec.many bin)
+    case T.fromList bs of
+        Nothing -> Parsec.parserFail "broken table"
+        Just t  -> return (E.Tree t)
+  where
+    one  = Parsec.char '1'
+    zero = Parsec.char '0'
+    bin  = True <$ one <|> False <$ zero
 
 pExpression ops = pExpr where
 
     pExpr = buildExpressionParser table pTerm
 
-    pTerm  =  parens pExpr
-          <|> pPrim
-          <|> pNullary
+    pTerm = parens pExpr <|> pPrim <|> pNullary
 
     pPrim = do
         name <- ident emptyIdents
@@ -42,32 +42,35 @@ pExpression ops = pExpr where
         params <- parens (pExpr `sepBy` comma)
         return $ E.Call name params
 
-    pNullary = token
-             $ choice . map mkParser
-             $ sortBy (flip . comparing $ length . snd)
-             $ M.toList ops >>= gather
-        where gather (name, O.NullaryOperator aliases) = (name,) <$> aliases
-              gather _ = []
-              mkParser (r, s) = try (E.call_0 r <$ Parsec.string s)
+    pNullary
+        = token
+        $ choice . map mkParser
+        $ sortBy (flip . comparing $ length . snd)
+        $ M.toList ops >>= gather
+      where
+        gather (name, O.NullaryOperator aliases) = (name,) <$> aliases
+        gather _ = []
+        mkParser (r, s) = try (E.call_0 r <$ Parsec.string s)
 
-    table = groupByFst
-          $ M.toList ops >>= gather
-        where gather (name, O.UnaryOperator  aliases (i, fixity)) =
-                (\alias -> (i, mkOperatorUnary  fixity name alias)) <$> aliases
-              gather (name, O.BinaryOperator aliases (i, fixity)) =
-                (\alias -> (i, mkOperatorBinary fixity name alias)) <$> aliases
-              gather _ = []
-              mkOperatorUnary  fixity name alias
-                    = unaryWrap fixity $ E.call_1 name <$ op alias
-              mkOperatorBinary fixity name alias
-                    = Infix (E.call_2 name <$ op alias) (binaryWrap fixity)
-              unaryWrap = \case
-                   O.Prefix  -> Prefix
-                   O.Postfix -> Postfix
-              binaryWrap = \case
-                   O.Leftfix  -> AssocLeft
-                   O.Rightfix -> AssocRight
-                   O.Nonfix   -> AssocNone
+
+    table = groupByFst (M.toList ops >>= gather)
+      where
+        gather (name, O.UnaryOperator aliases (i, fixity)) = do
+            alias <- aliases
+            let desc = wx (E.call_1 name <$ op alias)
+                wx = case fixity of
+                  O.Prefix  -> Prefix
+                  O.Postfix -> Postfix
+            return (i, desc)
+        gather (name, O.BinaryOperator aliases (i, fixity)) = do
+            alias <- aliases
+            let desc = Infix (E.call_2 name <$ op alias) wx
+                wx = case fixity of
+                  O.Leftfix  -> AssocLeft
+                  O.Rightfix -> AssocRight
+                  O.Nonfix   -> AssocNone
+            return (i, desc)
+        gather _ = []
 
 op :: String -> Parsec.Parsec String () String
 op = try . token . Parsec.string

@@ -34,6 +34,8 @@ functions = M.fromList
     , ("nor" , reflect2 nor )
     , ("ent" , reflect2 ent )
     , ("equ" , reflect2 (==))
-    ] where nand x y = not (x && y)
-            nor  x y = not (x || y)
-            ent  x y = not  x || y
+    ]
+  where
+    nand x y = not (x && y)
+    nor  x y = not (x || y)
+    ent  x y = not  x || y

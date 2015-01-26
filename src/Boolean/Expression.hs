@@ -54,13 +54,6 @@ onFunction f name = maybe (throwError $ BadCall name) f =<< asks (M.lookup name)
 
 withFunction = flip onFunction
 
-liftL2 :: ((a      -> c) -> (b      -> c))
-       -> ((a -> a -> c) -> (b -> b -> c))
-liftL2 k f a1 a2 =
-    flip k a1 $ \b1 ->
-    flip k a2 $ \b2 ->
-      f b1 b2
-
 funeq :: Function -> Function -> Evaluate Bool
 funeq = liftA2 (==) `on` tableOf
 

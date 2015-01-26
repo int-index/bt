@@ -17,7 +17,8 @@ unsafeFromList :: [a] -> Tree a
 unsafeFromList = fromJust . fromList
 
 fromList :: [a] -> Maybe (Tree a)
-fromList = joint . map Node where
+fromList = joint . map Node
+  where
     joint2 :: [Tree a] -> Maybe [Tree a]
     joint2 (x:y:zs) = (Joint x y :) <$> joint2 zs
     joint2 [ ] = Just []

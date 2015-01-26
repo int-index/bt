@@ -128,17 +128,20 @@ instance Show PostClass where
 check :: Function -> PostClass -> Evaluate Bool
 check fun (T a) = (==a) <$> evaluate fun (arity fun `replicate` a)
 check fun S  = and <$> mapM check1 (argsOf fun)
-    where check1 args = do
-            normal  <- evaluate fun args
-            negated <- evaluate fun (map not args)
-            return (not normal == negated)
+  where
+    check1 args = do
+        normal  <- evaluate fun args
+        negated <- evaluate fun (map not args)
+        return (not normal == negated)
 check fun M  = check1 <$> treeOf fun
-    where check1 (T.Node _) = True
-          check1 (T.Joint f t) = check1 f && check1 t && on (<=) T.toList f t
+  where
+    check1 (T.Node _) = True
+    check1 (T.Joint f t) = check1 f && check1 t && on (<=) T.toList f t
 check fun L  = all less1 . anf_core <$> normalize fun
-    where less1 [ ] = True
-          less1 [_] = True
-          less1  _  = False
+  where
+    less1 [ ] = True
+    less1 [_] = True
+    less1  _  = False
 
 postClasses :: Function -> Evaluate (S.Set PostClass)
 postClasses fun = S.fromList <$> filterM (check fun) [T False, T True, S, M, L]

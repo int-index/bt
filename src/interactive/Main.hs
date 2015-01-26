@@ -5,7 +5,8 @@ import System.Console.Haskeline hiding (complete)
 import qualified Data.Map as M
 import qualified Data.Set as S
 import Control.Monad.State.Strict
-import Control.Lens (declareLenses, (%=), use)
+import Control.Lens (declareLenses, (%=), use, uses)
+import Data.Char (isSpace)
 import Data.List (sortBy)
 import Data.Bool
 import Data.Monoid
@@ -34,7 +35,8 @@ emptyUserState :: UserState
 emptyUserState = UserState M.empty M.empty
 
 main :: IO ()
-main = runInputT settings (evalStateT ui defaultUserState) where
+main = runInputT settings (evalStateT ui defaultUserState)
+  where
     settings = Settings noCompletion Nothing True
     ui = hello >> loop talk bye
 
@@ -95,7 +97,14 @@ helpMessage = unlines
 
 handleDefine :: String -> Function -> M ()
 handleDefine name fun = do
-    definitions %= M.insert name fun
+    handleAssuming fun
+    overwriting <- uses definitions (M.member name)
+    if not overwriting then commit else do
+        outputLine "Overwrite existing definition?"
+        withInputLine () "(empty line if yes) " $ \str -> do
+            when (all isSpace str) commit
+  where
+    commit = definitions %= M.insert name fun
 
 handleUndefine :: String -> M ()
 handleUndefine name = do
@@ -113,12 +122,13 @@ handleShow form name = do
     ops <- use operators
     dispatch form `onFunction` name
         `runEval` \fun -> outputLine (rFunction ops fun)
-    where dispatch form = case form of
-              ShowDefault -> return
-              ShowCNF     -> conjunctive nf
-              ShowDNF     -> disjunctive nf
-              ShowANF     -> algebraic nf
-              ShowTable   -> tablify
+  where
+    dispatch form = case form of
+        ShowDefault -> return
+        ShowCNF     -> conjunctive nf
+        ShowDNF     -> disjunctive nf
+        ShowANF     -> algebraic nf
+        ShowTable   -> tablify
 
 handleClass :: String -> M ()
 handleClass name = do
@@ -130,9 +140,15 @@ handleComplete names = do
     mapM (onFunction return) names >>= complete
         `runEval` \p -> outputLine (if p then "Complete" else "Incomplete")
 
+handleAssuming :: Function -> M ()
+handleAssuming = \case
+    Function params _ -> outputLine ("Assuming: λ " ++ unwords params)
+    _ -> return ()
+
 handleEval :: Function -> M ()
-handleEval fun = test fun
-        `runEval` \p -> outputLine (if p then "True" else "False")
+handleEval fun = do
+    handleAssuming fun
+    test fun `runEval` \p -> outputLine (if p then "True" else "False")
 
 handleOperators :: M ()
 handleOperators = do
@@ -143,14 +159,14 @@ handleOperators = do
             UnaryOperator   as _ -> as
             BinaryOperator  as _ -> as
         fixshow = \case
-            NullaryOperator _ -> "nullfix "
+            NullaryOperator _ -> "nullfix"
             UnaryOperator  _ (_, fixity) -> case fixity of
-                Prefix   -> "prefix  "
-                Postfix  -> "postfix "
+                Prefix   -> "prefix"
+                Postfix  -> "postfix"
             BinaryOperator _ (_, fixity) -> case fixity of
-                Leftfix  -> "leftfix "
+                Leftfix  -> "leftfix"
                 Rightfix -> "rightfix"
-                Nonfix   -> "nonfix  "
+                Nonfix   -> "nonfix"
         align maxLength s = s ++ replicate (maxLength - length s) ' '
         -- a rather hacky formatting function
         format (name, op) = unwords $
@@ -160,7 +176,8 @@ handleOperators = do
     mapM_ (outputLine . format) (sortOps ops)
 
 sortOps :: Operators -> [(String, Operator)]
-sortOps = sortBy cmp . M.toList where
+sortOps = sortBy cmp . M.toList
+  where
     value = \case
         NullaryOperator _ -> Nothing
         UnaryOperator   _ (i, _) -> Just i
