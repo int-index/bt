@@ -1,5 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DataKinds #-}
 module Boolean.Analysis where
 
 import Control.Monad.Reader
@@ -27,11 +28,9 @@ nmap3 f g h = f . fmap (g . fmap h)
 -- Conjunctive, disjunctive and algebraic normal forms
 -- 
 
-data Conjunctive
-data Disjunctive
-data Algebraic
+data Form = Conjunctive | Disjunctive | Algebraic
 
-class NF a where
+class NF (a :: Form) where
     data family RepNF a :: *
     reifyNF :: RepNF a -> Evaluate Function
     normalize :: Function -> Evaluate (RepNF a)
@@ -43,7 +42,7 @@ conjunctive f = f (Proxy :: Proxy Conjunctive)
 disjunctive f = f (Proxy :: Proxy Disjunctive)
 algebraic   f = f (Proxy :: Proxy Algebraic)
 
-behavesLike :: Function -> Evaluate String
+behavesLike :: Function -> Evaluate Name
 behavesLike model
       = asks M.toList
     >>= filterM (funeq model . snd)
@@ -60,7 +59,7 @@ listXor = foldl0 <$> summon2 (/=) <*> summon0 False
 listAnd = foldl0 <$> summon2 (&&) <*> summon0 True
 
 instance NF Conjunctive where
-    data RepNF Conjunctive = CNF [String] [[(Bool, String)]]
+    data RepNF Conjunctive = CNF [Name] [[(Bool, Name)]]
     normalize fun = do
         let params = paramsOf fun
             args   = argsOf   fun
@@ -77,7 +76,7 @@ instance NF Conjunctive where
         return $ Function params (nmap3 pass2 pass1 pass0 expr)
 
 instance NF Disjunctive where
-    data RepNF Disjunctive = DNF [String] [[(Bool, String)]]
+    data RepNF Disjunctive = DNF [Name] [[(Bool, Name)]]
     normalize fun = do
         let params = paramsOf fun
             args   = argsOf   fun
@@ -94,7 +93,7 @@ instance NF Disjunctive where
         return $ Function params (nmap3 pass2 pass1 pass0 expr)
 
 instance NF Algebraic where
-    data RepNF Algebraic = ANF [String] [[String]]
+    data RepNF Algebraic = ANF [Name] [[Name]]
     normalize fun = do
         table <- tableOf fun
         let params = paramsOf fun
@@ -108,7 +107,7 @@ instance NF Algebraic where
         pass0 <- return Access
         return $ Function params (nmap3 pass2 pass1 pass0 expr)
 
-anf_core :: RepNF Algebraic -> [[String]]
+anf_core :: RepNF Algebraic -> [[Name]]
 anf_core (ANF _ core) = core
 
 ---

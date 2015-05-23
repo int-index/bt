@@ -71,7 +71,8 @@ talk = withInputLine False ">> " $ \commandString -> do
             ShowCommand form name -> handleShow form name
             ClassCommand name -> handleClass name
             CompleteCommand names -> handleComplete names
-            ListCommand  -> use definitions >>= outputLine . unlines . M.keys
+            ListCommand  -> use definitions
+                        >>= outputLine . unlines . map show . M.keys
             CleanCommand -> put   emptyUserState
             ResetCommand -> put defaultUserState
             OperatorsCommand -> handleOperators
@@ -95,7 +96,7 @@ helpMessage = unlines
     , ":reset             -- define standard functions"
     ]
 
-handleDefine :: String -> Function -> M ()
+handleDefine :: Name -> Function -> M ()
 handleDefine name fun = do
     handleAssuming fun
     overwriting <- uses definitions (M.member name)
@@ -106,7 +107,7 @@ handleDefine name fun = do
   where
     commit = definitions %= M.insert name fun
 
-handleUndefine :: String -> M ()
+handleUndefine :: Name -> M ()
 handleUndefine name = do
     definitions %= M.delete name
 
@@ -117,7 +118,7 @@ runEval x action = do
     defs <- use definitions
     runEvaluate defs (outputLine . show) action x
 
-handleShow :: ShowForm -> String -> M ()
+handleShow :: ShowForm -> Name -> M ()
 handleShow form name = do
     ops <- use operators
     dispatch form `onFunction` name
@@ -130,19 +131,20 @@ handleShow form name = do
         ShowANF     -> algebraic nf
         ShowTable   -> tablify
 
-handleClass :: String -> M ()
+handleClass :: Name -> M ()
 handleClass name = do
     postClasses `onFunction` name
         `runEval` \x -> outputLine (unwords . map show $ S.toList x)
 
-handleComplete :: [String] -> M ()
+handleComplete :: [Name] -> M ()
 handleComplete names = do
     mapM (onFunction return) names >>= complete
         `runEval` \p -> outputLine (if p then "Complete" else "Incomplete")
 
 handleAssuming :: Function -> M ()
 handleAssuming = \case
-    Function params _ -> outputLine ("Assuming: λ " ++ unwords params)
+    Function params _ | not (null params)
+      -> outputLine ("Assuming: λ " ++ unwords (map show params))
     _ -> return ()
 
 handleEval :: Function -> M ()
@@ -153,7 +155,7 @@ handleEval fun = do
 handleOperators :: M ()
 handleOperators = do
     ops <- use operators
-    let opNameLength = maximum (map length $ M.keys ops)
+    let opNameLength = maximum (map (length.show) $ M.keys ops)
         aliases = \case
             NullaryOperator as   -> as
             UnaryOperator   as _ -> as
@@ -170,12 +172,12 @@ handleOperators = do
         align maxLength s = s ++ replicate (maxLength - length s) ' '
         -- a rather hacky formatting function
         format (name, op) = unwords $
-            [ align (opNameLength + 1) name
+            [ align (opNameLength + 1) (show name)
             , align 9 (fixshow op)
             ] ++ map (align 3) (aliases op)
     mapM_ (outputLine . format) (sortOps ops)
 
-sortOps :: Operators -> [(String, Operator)]
+sortOps :: Operators -> [(Name, Operator)]
 sortOps = sortBy cmp . M.toList
   where
     value = \case

@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Boolean.Predef where
 
 import Boolean.Expression

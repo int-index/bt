@@ -15,12 +15,12 @@ import qualified Data.Map as M
 rFunction :: Operators -> Function -> String
 rFunction ops (Function params e)
     | null params = discarding rExpr e
-    | otherwise   = unwords params ++ " . " ++ discarding rExpr e
+    | otherwise   = unwords (map show params) ++ " . " ++ discarding rExpr e
     where rExpr = rExpression ops
 rFunction _ (Tree t) = "[" ++ map (bool '0' '1') (T.toList t) ++ "]"
 
 rExpression :: Operators -> Expression -> Leveling String
-rExpression _   (Access name)  = (name, L0)
+rExpression _   (Access name)  = (show name, L0)
 rExpression ops (Call name xs) = maybe (rCall name args) id mresult
     where args = rExpression ops `map` xs
           mresult  = do
@@ -63,8 +63,8 @@ wrapHard, wrapSoft :: Level -> (String, Level) -> String
 wrapHard p (a, q) = bool parens id (p `weaker` q) a
 wrapSoft p (a, q) = bool parens id (p `weaker` q || p == q) a
 
-rCall :: String -> [Leveling String] -> Leveling String
-rCall name xs = (name ++ parens (intercalate ", " $ discarding xs), L0)
+rCall :: Name -> [Leveling String] -> Leveling String
+rCall name xs = (show name ++ parens (intercalate ", " $ discarding xs), L0)
 
 parens :: String -> String
 parens s = "(" ++ s ++ ")"

@@ -6,12 +6,12 @@ data Command
     = PassCommand
     | QuitCommand
     | HelpCommand
-    | DefineCommand   String Function
-    | UndefineCommand String
+    | DefineCommand   Name Function
+    | UndefineCommand Name
     | EvalCommand Function
-    | ShowCommand ShowForm String
-    | ClassCommand String
-    | CompleteCommand [String]
+    | ShowCommand ShowForm Name
+    | ClassCommand Name
+    | CompleteCommand [Name]
     | ListCommand
     | CleanCommand
     | ResetCommand

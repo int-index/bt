@@ -4,33 +4,43 @@ import Control.Applicative
 import Control.Monad
 import Control.Monad.Except
 import Control.Monad.Reader
-import Data.List
+import Data.String (IsString(fromString))
 import Data.Function
 import qualified Data.Map as M
+import qualified Data.Set as S
 
 import qualified Data.Boolean.Tree as T
 
+newtype Name = NameConstructor String
+    deriving (Eq, Ord)
+
+instance IsString Name where
+    fromString = NameConstructor
+
+instance Show Name where
+    showsPrec n (NameConstructor s) = showsPrec n s
+
 data Expression
-    = Access String
-    | Call   String [Expression]
+    = Access Name
+    | Call Name [Expression]
 
 data Function
-    = Function [String] Expression
-    | Tree     (T.Tree Bool)
+    = Function [Name] Expression
+    | Tree (T.Tree Bool)
 
-call_0 :: String -> Expression
+call_0 :: Name -> Expression
 call_0 s     = Call s []
 
-call_1 :: String -> Expression -> Expression
+call_1 :: Name -> Expression -> Expression
 call_1 s x   = Call s [x]
 
-call_2 :: String -> Expression -> Expression -> Expression
+call_2 :: Name -> Expression -> Expression -> Expression
 call_2 s x y = Call s [x, y]
 
-type Definitions = M.Map String Function
+type Definitions = M.Map Name Function
 
-data Error = BadAccess String
-           | BadCall   String
+data Error = BadAccess Name
+           | BadCall   Name
            | BadModel
            | BadTree
     deriving (Eq, Show)
@@ -49,7 +59,7 @@ evaluate (Function params e) args = value e where
         $ \fun -> evaluate fun =<< mapM value xs
 evaluate (Tree t)  args = maybe (throwError BadTree) return (T.visit t args)
 
-onFunction :: (Function -> Evaluate a) -> (String -> Evaluate a)
+onFunction :: (Function -> Evaluate a) -> (Name -> Evaluate a)
 onFunction f name = maybe (throwError $ BadCall name) f =<< asks (M.lookup name)
 
 withFunction = flip onFunction
@@ -58,10 +68,10 @@ funeq :: Function -> Function -> Evaluate Bool
 funeq = liftA2 (==) `on` tableOf
 
 function :: Expression -> Function
-function e = Function (names e) e
+function e = Function (S.toAscList (names e)) e
 
-names :: Expression -> [String]
-names = sort . nub . names'
+names :: Expression -> S.Set Name
+names = S.fromList . names'
   where names' (Access name) = [name]
         names' (Call _ xs) = concatMap names' xs
 
@@ -75,8 +85,8 @@ treeOf :: Function -> Evaluate (T.Tree Bool)
 treeOf (Tree t) = return t
 treeOf fun = T.unsafeFromList <$> tableOf fun
 
-nameStream :: [String]
-nameStream = [1..] >>= flip replicateM alphabet
+nameStream :: [Name]
+nameStream = map fromString ([1..] >>= flip replicateM alphabet)
     where alphabet = ['a'..'z']
 
 columns :: [Bool] -> [[Bool]]
@@ -86,7 +96,7 @@ columns xs = let ys = zipWith (/=) xs (tail xs) in xs : columns ys
 argsOf :: Function -> [[Bool]]
 argsOf = variants . arity
 
-paramsOf :: Function -> [String]
+paramsOf :: Function -> [Name]
 paramsOf (Function params _) = params
 paramsOf fun = take (arity fun) nameStream
 
