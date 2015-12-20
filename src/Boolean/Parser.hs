@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 module Boolean.Parser where
 
 import Control.Applicative

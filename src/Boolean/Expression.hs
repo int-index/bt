@@ -18,7 +18,7 @@ instance IsString Name where
     fromString = NameConstructor
 
 instance Show Name where
-    showsPrec n (NameConstructor s) = showsPrec n s
+    show (NameConstructor s) = s
 
 data Expression
     = Access Name
